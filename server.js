@@ -37,7 +37,7 @@ function uid(p){ return p+'_'+Date.now().toString(36)+Math.random().toString(36)
 function now(){ return new Date().toISOString(); }
 
 /* ---------- initial data ---------- */
-function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, fulfillment:[], fulfillmentLocal:{}, version:1 }; }
+function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, salesTx:[], salesDaily:{}, salesMeta:{}, fulfillment:[], fulfillmentLocal:{}, version:1 }; }
 if (!fs.existsSync(DATA))    writeJSON(DATA, emptyData());
 if (!fs.existsSync(SECRETS)) writeJSON(SECRETS, {
   upcApiKey:'', aiProvider:'anthropic', aiApiKey:'', aiModel:'claude-haiku-4-5',
@@ -218,7 +218,8 @@ function requiredRole(url, method){
   if(url.startsWith('/api/users')) return 'owner';                        // team management
   if(url==='/api/data/reset' || url==='/api/nrs/reset') return 'owner';   // destructive
   if(method==='POST' && (url==='/api/marketing/send' || url==='/api/woo/publish' ||
-       url==='/api/catalog/publish-all' || url==='/api/invoices/post' || url==='/api/invoices/void'))
+       url==='/api/catalog/publish-all' || url==='/api/invoices/post' || url==='/api/invoices/void' ||
+       url==='/api/sales/clover/pull' || url==='/api/clover/rebuild'))
     return 'manager';
   return 'staff';   // any authenticated user
 }
@@ -997,7 +998,7 @@ async function cloverSyncSales(){
 async function cloverSalesTick(){
   if (!secrets.cloverSalesSync) return;
   if (!secrets.cloverMerchantId || !secrets.cloverApiToken) return;
-  try { await cloverSyncSales(); } catch(e){}
+  try { await cloverSalesImport({ reset:false }); } catch(e){}   // v2: cursor + upsert (reconciles refunds)
 }
 setInterval(()=>{ cloverSalesTick().catch(()=>{}); }, 60000);   // near real-time (every minute)
 
@@ -1027,6 +1028,165 @@ async function cloverRebuildSales(){
   if (data.posSales.length>500) data.posSales=data.posSales.slice(0,500);
   saveData();
   return { orders, matched, revenue:+revenue.toFixed(2), tax:+tax.toFixed(2) };
+}
+
+/* ============================================================
+   SALES STORE v2 — source-tagged transactions + durable daily rollups
+   data.salesTx   : one record per transaction (Clover order today; web/doordash later)
+   data.salesDaily: one record per `${source}|${YYYY-MM-DD}` business date
+   data.salesMeta : sync cursors/status per source
+   Source is a first-class field so new channels need no redesign — add an importer + a source key.
+   ============================================================ */
+const STORE_TZ = 'America/New_York';
+function bizDate(ms){ try{ return new Intl.DateTimeFormat('en-CA',{ timeZone:STORE_TZ, year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date(ms)); }catch(e){ return new Date(ms).toISOString().slice(0,10); } }
+function centsSum(arr, f){ return (arr||[]).reduce((a,x)=>a+(Number(f(x))||0),0); }
+
+// Best-effort Clover device (register) id -> name map.
+async function cloverDevices(){
+  const mId=(secrets.cloverMerchantId||'').trim(), token=(secrets.cloverApiToken||'').trim(), base=(secrets.cloverBase||'https://api.clover.com').trim();
+  if(!mId||!token) return {};
+  try{ const r=await fetch(`${base}/v3/merchants/${mId}/devices?limit=100`,{headers:{Authorization:'Bearer '+token}});
+    if(!r.ok) return {}; const j=await r.json(); const m={};
+    (j.elements||[]).forEach(d=>{ m[d.id]=d.name||d.serial||d.model||String(d.id).slice(-4); }); return m;
+  }catch(e){ return {}; }
+}
+
+// Turn a Clover order into a rich, self-contained sales transaction (all metrics, money in dollars).
+function buildCloverTx(o, devMap){
+  const lines=(o.lineItems&&o.lineItems.elements)||[];
+  const payments=(o.payments&&o.payments.elements)||[];
+  const refundsArr=(o.refunds&&o.refunds.elements)||[];
+  const odisc=(o.discounts&&o.discounts.elements)||[];
+  let grossC=0, discC=0, units=0, refUnits=0; const outLines=[];
+  for(const li of lines){
+    const price = typeof li.price==='number'?li.price:0;
+    grossC += price;
+    let d=0; const ds=(li.discounts&&li.discounts.elements)||[];
+    for(const x of ds){ if(typeof x.amount==='number') d += -x.amount; else if(typeof x.percentage==='number') d += Math.round(price*x.percentage/100); }
+    discC += d;
+    if(li.refunded===true) refUnits++; else units++;
+    const it=li.item||{};
+    outLines.push({ sku:it.sku||it.code||'', name:li.name||it.name||'', net:+((price-d)/100).toFixed(2) });
+  }
+  for(const x of odisc){ if(typeof x.amount==='number') discC += -x.amount; else if(typeof x.percentage==='number') discC += Math.round(grossC*x.percentage/100); }
+  const taxC=centsSum(payments,p=>p.taxAmount), tipC=centsSum(payments,p=>p.tipAmount), refundC=centsSum(refundsArr,r=>r.amount);
+  const totalC = typeof o.total==='number'?o.total:(grossC-discC+taxC);
+  let payType='—';
+  if(payments.length){ const labels=[...new Set(payments.map(p=>(p.tender&&(p.tender.label||p.tender.labelKey))||'Other'))]; payType = labels.length>1?'Split':labels[0]; }
+  const c=v=>+((v||0)/100).toFixed(2);
+  const grossSales=c(grossC), discounts=c(discC), tax=c(taxC), tip=c(tipC), refunds=c(refundC);
+  const netSales=+(grossSales-discounts-refunds).toFixed(2);
+  return { id:'clover:'+o.id, source:'clover', orderId:o.id, number:String(o.number||o.id).slice(-6),
+    ts: o.createdTime? new Date(o.createdTime).toISOString() : now(), date: bizDate(o.createdTime||Date.now()),
+    modified: o.modifiedTime||o.createdTime||Date.now(),
+    grossSales, discounts, refunds, netSales, tax, tip, total:c(totalC),
+    units, refundedUnits:refUnits, paymentType:payType,
+    employee:(o.employee&&o.employee.name)||'', device:(o.device&&(devMap[o.device.id]||o.device.id))||'',
+    state:o.state||'', lines:outLines };
+}
+
+// Recompute daily rollups for one source from salesTx (durable, never truncated).
+function rebuildDailyForSource(source){
+  data.salesDaily = data.salesDaily || {};
+  for(const k in data.salesDaily){ if(data.salesDaily[k] && data.salesDaily[k].source===source) delete data.salesDaily[k]; }
+  const acc={};
+  for(const t of (data.salesTx||[])){
+    if(t.source!==source) continue;
+    const key=source+'|'+t.date; const d=acc[key]||(acc[key]={source,date:t.date,gross:0,discounts:0,refunds:0,net:0,tax:0,tip:0,units:0,orders:0,byPayment:{}});
+    d.gross+=t.grossSales||0; d.discounts+=t.discounts||0; d.refunds+=t.refunds||0; d.net+=t.netSales||0; d.tax+=t.tax||0; d.tip+=t.tip||0; d.units+=t.units||0; d.orders+=1;
+    const pt=t.paymentType||'Other'; d.byPayment[pt]=+(((d.byPayment[pt]||0)+(t.netSales||0))).toFixed(2);
+  }
+  for(const key in acc){ const d=acc[key]; ['gross','discounts','refunds','net','tax','tip'].forEach(f=>d[f]=+d[f].toFixed(2)); d.aov=d.orders?+(d.net/d.orders).toFixed(2):0; d.status='imported'; d.syncedAt=now(); data.salesDaily[key]=d; }
+}
+
+// The rebuilt Clover SALES importer: cursor + full pagination + upsert (refunds/voids reconcile).
+async function cloverSalesImport({ reset=false, days=90 }={}){
+  const mId=(secrets.cloverMerchantId||'').trim(), token=(secrets.cloverApiToken||'').trim(), base=(secrets.cloverBase||'https://api.clover.com').trim();
+  if(!mId||!token) throw new Error('Clover not configured — set merchant ID and token in Settings.');
+  data.salesTx=data.salesTx||[]; data.salesDaily=data.salesDaily||{}; data.salesMeta=data.salesMeta||{}; data.cloverProcessed=data.cloverProcessed||{};
+  const devMap = await cloverDevices();
+  let cutoffMs;
+  if(reset){
+    data.salesTx = data.salesTx.filter(t=>t.source!=='clover');
+    for(const k in data.salesDaily){ if(data.salesDaily[k] && data.salesDaily[k].source==='clover') delete data.salesDaily[k]; }
+    data.events   = (data.events||[]).filter(e=> !/clover/i.test(e.note||''));
+    data.posSales = (data.posSales||[]).filter(s=> s.source!=='Clover');
+    data.cloverProcessed = {};
+    data.salesMeta.cloverSyncedThrough = 0;
+    cutoffMs = Date.now() - (Number(days)||90)*864e5;
+  } else {
+    const through = data.salesMeta.cloverSyncedThrough||0;
+    cutoffMs = through ? Math.max(0, through - 6*3600*1000) : Date.now()-90*864e5;  // 6h overlap catches modified/refunded orders
+  }
+  const idx={}; data.salesTx.forEach((t,i)=>{ if(t.source==='clover') idx[t.orderId]=i; });
+  let offset=0, fetched=0, upserts=0, maxMod=data.salesMeta.cloverSyncedThrough||0;
+  while(offset<20000){
+    const filter = encodeURIComponent('modifiedTime>='+cutoffMs);
+    const url = `${base}/v3/merchants/${mId}/orders?expand=lineItems.item,lineItems.discounts,payments,refunds,discounts,employee,customers&limit=100&offset=${offset}&orderBy=modifiedTime+ASC&filter=${filter}`;
+    const r = await fetch(url, { headers:{ Authorization:'Bearer '+token } });
+    if(!r.ok) throw new Error('Clover orders API HTTP '+r.status+' — check token/merchant ID.');
+    const els = (await r.json()).elements || [];
+    for(const o of els){
+      if(!(o.payments && o.payments.elements && o.payments.elements.length)) continue;   // unpaid — ignore
+      const tx = buildCloverTx(o, devMap);
+      if(idx[o.id]!=null) data.salesTx[idx[o.id]] = tx; else { data.salesTx.push(tx); idx[o.id]=data.salesTx.length-1; }
+      upserts++;
+      // Stock + legacy events: decrement ONCE per order (first time seen, live mode only).
+      if(reset){ cloverOrderToEvents(o, false); data.cloverProcessed[o.id]=true; }
+      else if(!data.cloverProcessed[o.id]){ cloverOrderToEvents(o, true); data.cloverProcessed[o.id]=true; }
+      const m=o.modifiedTime||o.createdTime||0; if(m>maxMod) maxMod=m;
+    }
+    fetched+=els.length; if(els.length<100) break; offset+=100;
+  }
+  data.salesMeta.cloverSyncedThrough = maxMod || Date.now();
+  data.salesMeta.cloverLastSync = now();
+  rebuildDailyForSource('clover');
+  if(data.salesTx.length>200000) data.salesTx = data.salesTx.slice(-200000);
+  saveData();
+  return { fetched, upserts, txTotal: data.salesTx.filter(t=>t.source==='clover').length, since: bizDate(cutoffMs) };
+}
+
+// One-time: seed NRS daily records from the legacy rollup so historical days show in the new dashboard.
+function backfillNrsDaily(){
+  data.salesDaily = data.salesDaily || {};
+  const roll = data.salesRollup || {};
+  let added=0;
+  for(const day in roll){
+    const key='nrs|'+day;
+    if(data.salesDaily[key]) continue;
+    const n=roll[day] && roll[day].nrs;
+    if(!n || !(n.r||n.u)) continue;
+    data.salesDaily[key]={ source:'nrs', date:day, gross:+(n.r||0).toFixed(2), net:+(n.r||0).toFixed(2),
+      discounts:0, refunds:0, tax:0, tip:0, units:n.u||0, orders:0, aov:0, taxable:0, nonTaxable:0,
+      status:'imported', syncedAt:null, report:'backfill' };
+    added++;
+  }
+  if(added) saveData();
+  return added;
+}
+
+// Range helpers for the dashboards (business dates, store timezone).
+function todayBiz(){ return bizDate(Date.now()); }
+function salesDailyRows(source, from, to){
+  const out=[];
+  for(const k in (data.salesDaily||{})){ const d=data.salesDaily[k];
+    if(!d) continue; if(source && d.source!==source) continue;
+    if(from && d.date<from) continue; if(to && d.date>to) continue; out.push(d);
+  }
+  return out.sort((a,b)=> a.date<b.date?1:-1);
+}
+function salesSummary(from, to){
+  const bySource={};
+  for(const d of salesDailyRows(null, from, to)){
+    const s=bySource[d.source]||(bySource[d.source]={source:d.source,gross:0,discounts:0,refunds:0,net:0,tax:0,tip:0,units:0,orders:0,days:0});
+    s.gross+=d.gross||0; s.discounts+=d.discounts||0; s.refunds+=d.refunds||0; s.net+=d.net||0; s.tax+=d.tax||0; s.tip+=d.tip||0; s.units+=d.units||0; s.orders+=d.orders||0; s.days+=1;
+  }
+  const combined={gross:0,discounts:0,refunds:0,net:0,tax:0,units:0,orders:0};
+  for(const k in bySource){ const s=bySource[k]; ['gross','discounts','refunds','net','tax','tip'].forEach(f=>s[f]=+(s[f]||0).toFixed(2)); s.aov=s.orders?+(s.net/s.orders).toFixed(2):0;
+    combined.gross+=s.gross; combined.discounts+=s.discounts; combined.refunds+=s.refunds; combined.net+=s.net; combined.tax+=s.tax; combined.units+=s.units; combined.orders+=s.orders; }
+  ['gross','discounts','refunds','net','tax'].forEach(f=>combined[f]=+combined[f].toFixed(2));
+  combined.aov = combined.orders?+(combined.net/combined.orders).toFixed(2):0;
+  return { bySource, combined };
 }
 
 /* --- NRS auto-import: watch a drop folder for sales CSVs --- */
@@ -1079,7 +1239,7 @@ function applySalesCsv(text, src, saleDate){
   // Re-importing a day's report replaces it: drop any existing NRS events for this date first.
   const dayStr = new Date(ts).toISOString().slice(0,10);
   data.events = data.events.filter(e => !(/\(nrs\)/i.test(e.note||'') && String(e.timestamp).slice(0,10)===dayStr));
-  let applied=0, unmatched=0, matchedUnits=0, matchedRev=0, allDetailRev=0, allDetailUnits=0, deptRev=0, deptUnits=0; const items=[];
+  let applied=0, unmatched=0, matchedUnits=0, matchedRev=0, allDetailRev=0, allDetailUnits=0, deptRev=0, deptUnits=0, taxableRev=0, nonTaxableRev=0; const items=[];
   for (let i=hr+1;i<rows.length;i++){ const r=rows[i];
     const bc = cB>=0 ? cleanCellSrv(r[cB]) : '';
     const sk = cS>=0 ? cleanCellSrv(r[cS]) : '';
@@ -1087,7 +1247,8 @@ function applySalesCsv(text, src, saleDate){
     const qty = Math.round(Number(String(r[cQ]||'0').replace(/[^0-9.\-]/g,''))||0);
     if (!qty) continue;
     const amt = cA>=0 ? (Number(String(r[cA]||'').replace(/[^0-9.\-]/g,''))||0) : 0;
-    if (!bc && !sk){ deptRev += amt; deptUnits += qty; continue; }   // department/summary total row (Taxable / Non-Taxable)
+    if (!bc && !sk){ deptRev += amt; deptUnits += qty;                // department/summary total row (Taxable / Non-Taxable)
+      if(/non[\s-]*tax/i.test(nm)) nonTaxableRev += amt; else if(/tax/i.test(nm)) taxableRev += amt; continue; }
     allDetailRev += amt; allDetailUnits += qty;
     const p = findProduct(sk,bc,nm);
     if (p){ p.qty=Math.max(0,(p.qty||0)-qty); p.lastSale=ts; p.lastUpdated=now(); matchedUnits+=qty; matchedRev+=amt;
@@ -1103,6 +1264,13 @@ function applySalesCsv(text, src, saleDate){
   const remRev = +(grand - matchedRev).toFixed(2);
   const remUnits = Math.max(0, grandUnits - matchedUnits);
   if (remRev > 0.005) data.events.unshift({ id:uid('e'), productId:'', type:'Stock decrease', qtyChange:-remUnits, rev:remRev, note:'POS (NRS) '+src+' — unscanned/unmatched', timestamp:ts });
+  // Durable daily record for the NRS sales dashboard (date-wise; NRS is aggregate, no per-transaction data).
+  data.salesDaily = data.salesDaily || {};
+  data.salesDaily['nrs|'+dayStr] = { source:'nrs', date:dayStr,
+    gross:+grand.toFixed(2), net:+grand.toFixed(2), discounts:0, refunds:0, tax:0, tip:0,
+    units:grandUnits, orders:0, aov:0,
+    taxable:+taxableRev.toFixed(2), nonTaxable:+nonTaxableRev.toFixed(2),
+    status:'imported', syncedAt: now(), report: src };
   return { applied, unmatched, units:matchedUnits+remUnits, revenue:+grand.toFixed(2), items };
 }
 // Parse a date like "Jun_29,_2026" / "Jun 29, 2026" out of an NRS filename.
@@ -2317,6 +2485,7 @@ const server = http.createServer(async (req, res)=>{
                searchLog:body.searchLog||[], customers:body.customers||data.customers||[],
                webSales: data.webSales||[], wooProcessed: data.wooProcessed||{}, webOrders: data.webOrders||[], invoices: data.invoices||[], supplierSkus: data.supplierSkus||{}, movements: data.movements||[], salesRollup: data.salesRollup||{}, fulfillment: data.fulfillment||[], fulfillmentLocal: data.fulfillmentLocal||{},
                posSales: data.posSales||[], cloverProcessed: data.cloverProcessed||{},
+               salesTx: data.salesTx||[], salesDaily: data.salesDaily||{}, salesMeta: data.salesMeta||{},
                nrsProcessed: data.nrsProcessed||{}, nrsLog: data.nrsLog||[],
                expenses: body.expenses!==undefined?body.expenses:(data.expenses||[]),
                purchaseList: body.purchaseList!==undefined?body.purchaseList:(data.purchaseList||[]),
@@ -2454,12 +2623,36 @@ const server = http.createServer(async (req, res)=>{
       return send(res,200,result);
     }
     if (url === '/api/clover/sales/sync' && req.method === 'POST'){
-      const result = await cloverSyncSales();
+      const result = await cloverSalesImport({ reset:false });   // v2 incremental
       return send(res,200,result);
     }
     if (url === '/api/clover/rebuild' && req.method === 'POST'){
-      const result = await cloverRebuildSales();
+      const b = await readBody(req).catch(()=>({}));
+      const result = await cloverSalesImport({ reset:true, days:Number(b.days)||90 });   // wipe & re-pull
       return send(res,200,result);
+    }
+    // ---- Sales dashboards v2 ----
+    if (url === '/api/sales/clover/pull' && req.method === 'POST'){
+      const b = await readBody(req).catch(()=>({}));
+      const result = await cloverSalesImport({ reset:!!b.reset, days:Number(b.days)||90 });
+      return send(res,200,result);
+    }
+    if (url.startsWith('/api/sales/summary') && req.method === 'GET'){
+      const u=new URL(req.url,'http://x');
+      return send(res,200, salesSummary(u.searchParams.get('from')||'', u.searchParams.get('to')||''));
+    }
+    if (url.startsWith('/api/sales/rows') && req.method === 'GET'){
+      const u=new URL(req.url,'http://x');
+      return send(res,200,{ rows: salesDailyRows(u.searchParams.get('source')||'', u.searchParams.get('from')||'', u.searchParams.get('to')||''),
+        today: todayBiz(), meta: data.salesMeta||{} });
+    }
+    if (url.startsWith('/api/sales/tx') && req.method === 'GET'){
+      const u=new URL(req.url,'http://x');
+      const source=u.searchParams.get('source')||'clover', from=u.searchParams.get('from')||'', to=u.searchParams.get('to')||'';
+      const lim=Math.min(2000, Number(u.searchParams.get('limit'))||500);
+      let rows=(data.salesTx||[]).filter(t=> t.source===source && (!from||t.date>=from) && (!to||t.date<=to));
+      rows.sort((a,b)=> a.ts<b.ts?1:-1);
+      return send(res,200,{ total:rows.length, rows:rows.slice(0,lim) });
     }
     if (url === '/api/nrs/email/fetch' && req.method === 'POST'){
       const result = await imapFetchNrs(30);
@@ -2850,6 +3043,7 @@ const server = http.createServer(async (req, res)=>{
 });
 
 if (authOn()) ensureOwner();   // only seed the owner login when auth is enforced
+try { backfillNrsDaily(); } catch(e){}   // seed NRS daily records from the legacy rollup once
 server.listen(PORT, ()=>{
   const ips = [];
   const ni = os.networkInterfaces();

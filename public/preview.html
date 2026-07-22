@@ -660,42 +660,146 @@ function periodSeg(){return `<div class="seg">${[7,30,90].map(d=>`<button class=
 function rangeSeg(cur,setter){const opts=[['today','Today'],[7,'Week'],[30,'Month'],[90,'90 days']];return `<div class="seg">${opts.map(o=>`<button class="${cur===o[0]?'on':''}" onclick="${setter}(${typeof o[0]==='string'?"'"+o[0]+"'":o[0]});render()">${o[1]}</button>`).join('')}</div>`}
 function setSalesRange(r){salesRange=r;}
 function setOverviewRange(r){overviewRange=r;}
-function viewSales(){
-  const a=salesAgg(salesRange);const avg=a.units?a.rev/a.units:0;const today=salesRange==='today';
-  const chanParts=Object.entries(a.chan).map(([k,v])=>({label:k,value:v,color:CH_COLOR[k]||'#b6bcc6'})).sort((x,y)=>y.value-x.value);
-  const topCh=chanParts[0]?chanParts[0].label:'—';
-  const cats=Object.entries(a.cat).map(([k,v])=>({label:k,value:v,color:'#7d93df'})).sort((x,y)=>y.value-x.value).slice(0,7);
-  const top=Object.values(a.prod).sort((x,y)=>y.r-x.r).slice(0,8);
-  const wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];const peak=Object.entries(a.dow).sort((x,y)=>y[1]-x[1])[0];
-  const chart=today?(a.rev>0?hourChart(a.hours):''):(a.rev>0?dayBars(a.byDay,salesRange):'');
-  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Sales</h1>${rangeSeg(salesRange,'setSalesRange')}</div>
-  <div class="kpis">
-   <div class="kpi"><div class="t">Revenue</div><div class="v">${money(a.rev)}</div><div class="s">${rangeLabel(salesRange)}</div></div>
-   <div class="kpi"><div class="t">Items sold</div><div class="v">${a.units.toLocaleString()}</div></div>
-   <div class="kpi"><div class="t">Avg item price</div><div class="v">${money2(avg)}</div></div>
-   <div class="kpi"><div class="t">Top channel</div><div class="v" style="font-size:21px">${topCh}</div></div>
-   <div class="kpi"><div class="t">Tax collected</div><div class="v">${money(a.tax)}</div></div>
-  </div>
-  <div class="grid2">
-    <div class="card"><div class="hd"><b>${today?'Sales by hour':'Revenue trend'}</b><span class="sub">${!today&&peak?'Peak day: '+wd[peak[0]]:''}</span></div><div class="bd">${chart||'<div class="sub" style="padding:26px;text-align:center">No sales in this period.</div>'}</div></div>
-    <div class="card"><div class="hd"><b>Channel share</b></div><div class="bd health">${chanParts.length?donutMulti(chanParts):''}
-      <div style="width:100%;margin-top:10px">${chanParts.map(p=>`<div style="display:flex;justify-content:space-between;font-size:13px;margin:6px 0"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:7px"></span>${p.label}</span><b>${money(p.value)}</b></div>`).join('')||'<div class="sub">No sales.</div>'}</div>
-    </div></div>
-  </div>
-  <div class="grid2" style="margin-top:16px">
-    <div class="card"><div class="hd"><b>Top sellers</b></div><div class="bd"><table><thead><tr><th>Product</th><th class="right">Units</th><th class="right">Revenue</th></tr></thead><tbody>
-      ${top.length?top.map(x=>`<tr><td><a onclick="openDetail('${x.p.id}')" style="cursor:pointer;color:inherit;display:inline-flex;align-items:center">${thumb(x.p,30)}<span style="font-weight:600">${esc(x.p.name)}</span></a></td><td class="right">${x.u}</td><td class="right">${money(x.r)}</td></tr>`).join(''):`<tr><td colspan="3" class="sub" style="padding:18px">No sales yet.</td></tr>`}
-    </tbody></table></div></div>
-    <div class="card"><div class="hd"><b>Sales by category</b></div><div class="bd">${barList(cats,money)}</div></div>
-  </div>
-  <div class="card" style="margin-top:16px"><div class="hd"><b>Sales by day — verify the sync</b><div class="seg">${[14,30,90].map(d=>`<button class="${salesDailyDays===d?'on':''}" onclick="salesDailyDays=${d};loadSalesDailyPB()">${d}d</button>`).join('')}</div></div>
-    <div class="bd"><div id="salesDailyBox"><button class="btn sec" onclick="loadSalesDailyPB()">Load daily breakdown</button> <span class="sub">Check every day has NRS + Clover totals — $0 days flag a sync gap.</span></div></div></div>`;
+/* ============================================================
+   SALES v2 — Clover / NRS / Overall tabs, source-tagged, date-wise
+   ============================================================ */
+const SRC_META={clover:{label:'Clover',color:'#2447d6'},nrs:{label:'NRS',color:'#16a34a'},web:{label:'Website',color:'#d97706'},doordash:{label:'DoorDash',color:'#eb1700'},ubereats:{label:'Uber Eats',color:'#06c167'},grubhub:{label:'Grubhub',color:'#f63440'},other:{label:'Other',color:'#8a94a6'}};
+function srcLabel(s){return (SRC_META[s]||{label:s}).label;}
+function srcColor(s){return (SRC_META[s]||{color:'#8a94a6'}).color;}
+const SALES_PRESETS=[['today','Today'],['yesterday','Yesterday'],['week','This week'],['last7','Last 7 days'],['last30','Last 30 days'],['month','This month'],['year','This year']];
+let salesTab='overall', salesRangeKey='last7', salesData=null, salesLoadingKey='', salesBusy=false;
+function ymdLocal(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function salesRangeDates(key){const now=new Date();const t=ymdLocal(now);
+  if(key==='today')return{from:t,to:t};
+  if(key==='yesterday'){const y=new Date(now);y.setDate(y.getDate()-1);const s=ymdLocal(y);return{from:s,to:s};}
+  if(key==='week'){const w=new Date(now);const dow=(w.getDay()+6)%7;w.setDate(w.getDate()-dow);return{from:ymdLocal(w),to:t};}
+  if(key==='last7'){const s=new Date(now);s.setDate(s.getDate()-6);return{from:ymdLocal(s),to:t};}
+  if(key==='last30'){const s=new Date(now);s.setDate(s.getDate()-29);return{from:ymdLocal(s),to:t};}
+  if(key==='month'){const s=new Date(now.getFullYear(),now.getMonth(),1);return{from:ymdLocal(s),to:t};}
+  if(key==='year'){const s=new Date(now.getFullYear(),0,1);return{from:ymdLocal(s),to:t};}
+  return{from:t,to:t};}
+function salesCacheKey(){return salesTab+'|'+salesRangeKey;}
+function salesSetTab(t){salesTab=t;salesData=null;render();}
+function salesSetRange(k){salesRangeKey=k;salesData=null;render();}
+async function salesLoad(){
+  const ck=salesCacheKey();salesLoadingKey=ck;salesBusy=true;
+  const r=salesRangeDates(salesRangeKey);
+  try{
+    const [sum,rows]=await Promise.all([
+      fetch(`/api/sales/summary?from=${r.from}&to=${r.to}`).then(x=>x.json()),
+      fetch(`/api/sales/rows?from=${r.from}&to=${r.to}`).then(x=>x.json())
+    ]);
+    let tx=null;
+    if(salesTab==='clover') tx=await fetch(`/api/sales/tx?source=clover&from=${r.from}&to=${r.to}&limit=500`).then(x=>x.json());
+    salesData={ck,range:r,sum,rows:(rows.rows||[]),today:rows.today,meta:rows.meta||{},tx};
+  }catch(e){ salesData={ck,range:r,error:e.message||String(e)}; }
+  salesBusy=false;render();
 }
-let salesDailyDays=14;
-async function loadSalesDailyPB(){const box=document.getElementById('salesDailyBox');if(!box)return;box.textContent='Loading…';try{const d=await(await fetch('/api/sales/daily?days='+salesDailyDays)).json();const rows=d.rows||[];const gaps=rows.filter(x=>x.empty).length;const m=v=>v?'$'+Number(v).toFixed(2):'—';
-  box.innerHTML=`<div style="margin-bottom:8px"><b>${rows.length-gaps}</b> days with sales · <b style="color:${gaps?'#b45309':'#15803d'}">${gaps}</b> day(s) at $0 ${gaps?'<span class="pill low">review these</span>':'<span class="pill in">no gaps</span>'}</div>
-   <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Day</th><th class="right">NRS</th><th class="right">Clover</th><th class="right">Web</th><th class="right">Total</th><th class="right">Units</th></tr></thead><tbody>${rows.map(x=>`<tr style="${x.empty?'background:#fff7ed':''}"><td style="font-size:12px;font-weight:600">${x.date}</td><td class="sub" style="font-size:12px">${x.dow}</td><td class="right" style="font-size:12px">${m(x.nrs&&x.nrs.r)}</td><td class="right" style="font-size:12px">${m(x.clover&&x.clover.r)}</td><td class="right" style="font-size:12px">${m(x.web&&x.web.r)}</td><td class="right" style="font-weight:700">${x.empty?'<span class="pill low">$0</span>':'$'+Number(x.totalRev||0).toFixed(2)}</td><td class="right" style="font-size:12px">${x.totalUnits||''}</td></tr>`).join('')}</tbody></table></div>`;
-  }catch(e){box.textContent='Could not load sales.';}}
+async function salesResetClover(){
+  if(!confirm('Wipe ROS’s Clover sales and re-pull everything from Clover so they match exactly?\n\nThis re-imports the last 90 days from the Clover API. Your NRS history is untouched. Stock counts are not changed.'))return;
+  toast('Wiping & re-pulling Clover… this can take a minute');
+  try{const d=await(await fetch('/api/sales/clover/pull',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({reset:true,days:90})})).json();if(d.error)throw new Error(d.error);
+    salesData=null;await load();render();toast('Clover re-pulled: '+((d.txTotal||0).toLocaleString())+' transactions since '+(d.since||''));}
+  catch(e){toast('Re-pull failed: '+(e.message||e));}
+}
+async function salesSyncClover(){toast('Syncing Clover…');try{const d=await(await fetch('/api/sales/clover/pull',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({reset:false})})).json();if(d.error)throw new Error(d.error);salesData=null;render();toast('Synced '+((d.upserts||0))+' order(s)');}catch(e){toast('Sync failed: '+(e.message||e));}}
+function dowShort(dstr){try{return new Date(dstr+'T12:00:00').toLocaleDateString(undefined,{weekday:'short'});}catch(e){return'';}}
+function salesRangeChips(){return `<div class="chips" style="margin:0">${SALES_PRESETS.map(([k,l])=>`<button class="chip ${salesRangeKey===k?'on':''}" onclick="salesSetRange('${k}')">${l}</button>`).join('')}</div>`;}
+function kpi(t,v,s,c){return `<div class="kpi"><div class="t">${t}</div><div class="v"${c?` style="color:${c}"`:''}>${v}</div>${s?`<div class="s">${s}</div>`:''}</div>`;}
+
+function viewSales(){
+  const ck=salesCacheKey();
+  if(!salesData || salesData.ck!==ck){ if(salesLoadingKey!==ck && !salesBusy) salesLoad(); }
+  const tabs=[['overall','Overall'],['clover','Clover'],['nrs','NRS']];
+  const head=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Sales</h1>${salesRangeChips()}</div>
+    <div class="seg" style="margin:14px 0 8px">${tabs.map(t=>`<button class="${salesTab===t[0]?'on':''}" onclick="salesSetTab('${t[0]}')">${t[1]}</button>`).join('')}</div>`;
+  if(!salesData || salesData.ck!==ck) return head+`<div class="card"><div class="bd"><div class="sub" style="padding:22px">Loading sales…</div></div></div>`;
+  if(salesData.error) return head+`<div class="card"><div class="bd"><div class="sub" style="padding:22px;color:#b4423a">Couldn’t load sales: ${esc(salesData.error)}</div></div></div>`;
+  const body = salesTab==='clover'?salesCloverBody():salesTab==='nrs'?salesNrsBody():salesOverallBody();
+  return head+body;
+}
+function salesDayTable(source){
+  const rows=(salesData.rows||[]).filter(d=>d.source===source);
+  if(!rows.length) return `<div class="sub" style="padding:18px">No ${srcLabel(source)} sales in this range.</div>`;
+  return `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Day</th><th class="right">Net</th><th class="right">Gross</th><th class="right">Tax</th><th class="right">Units</th>${source==='clover'?'<th class="right">Orders</th><th class="right">AOV</th>':''}</tr></thead><tbody>
+    ${rows.map(d=>`<tr><td style="font-weight:600">${d.date}</td><td class="sub">${dowShort(d.date)}</td><td class="right" style="font-weight:700">${money2(d.net)}</td><td class="right sub">${money2(d.gross)}</td><td class="right sub">${money2(d.tax)}</td><td class="right">${(d.units||0).toLocaleString()}</td>${source==='clover'?`<td class="right">${d.orders||0}</td><td class="right sub">${money2(d.aov||0)}</td>`:''}</tr>`).join('')}
+  </tbody></table></div>`;
+}
+function salesOverallBody(){
+  const c=salesData.sum.combined||{}; const bs=salesData.sum.bySource||{};
+  const srcs=Object.values(bs).sort((a,b)=>b.net-a.net);
+  const netTot=c.net||0;
+  return `<div class="kpis">
+    ${kpi('Net sales',money2(c.net||0),SALES_PRESETS.find(p=>p[0]===salesRangeKey)[1])}
+    ${kpi('Gross sales',money2(c.gross||0))}
+    ${kpi('Discounts',money2(c.discounts||0))}
+    ${kpi('Tax collected',money2(c.tax||0))}
+    ${kpi('Refunds',money2(c.refunds||0),null,c.refunds?'#b56a6a':'')}
+    ${kpi('Transactions',(c.orders||0).toLocaleString(),'Clover only')}
+    ${kpi('Items sold',(c.units||0).toLocaleString())}
+    ${kpi('Avg order',money2(c.aov||0),'Clover')}
+   </div>
+   <div class="card"><div class="hd"><b>By source</b><span class="sub">each channel kept separate</span></div><div class="bd"><table><thead><tr><th>Source</th><th class="right">Net</th><th class="right">Gross</th><th class="right">Tax</th><th class="right">Units</th><th class="right">Txns</th><th class="right">Share</th></tr></thead><tbody>
+     ${srcs.length?srcs.map(s=>`<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${srcColor(s.source)};margin-right:8px"></span><b>${srcLabel(s.source)}</b></td><td class="right" style="font-weight:700">${money2(s.net)}</td><td class="right sub">${money2(s.gross)}</td><td class="right sub">${money2(s.tax)}</td><td class="right">${(s.units||0).toLocaleString()}</td><td class="right">${s.orders||0}</td><td class="right sub">${netTot?Math.round(s.net/netTot*100):0}%</td></tr>`).join(''):`<tr><td colspan="7" class="sub" style="padding:18px">No sales in this range.</td></tr>`}
+   </tbody></table></div></div>
+   <div class="card" style="margin-top:16px"><div class="hd"><b>Day by day — all sources</b></div><div class="bd">${salesCombinedDayTable()}</div></div>`;
+}
+function salesCombinedDayTable(){
+  const byDay={};(salesData.rows||[]).forEach(d=>{const o=byDay[d.date]||(byDay[d.date]={date:d.date,clover:0,nrs:0,other:0,units:0});const b=(d.source==='clover')?'clover':(d.source==='nrs')?'nrs':'other';o[b]+=d.net||0;o.units+=d.units||0;});
+  const days=Object.values(byDay).sort((a,b)=>a.date<b.date?1:-1);
+  if(!days.length) return '<div class="sub" style="padding:18px">No sales in this range.</div>';
+  return `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Day</th><th class="right">Clover</th><th class="right">NRS</th><th class="right">Total</th><th class="right">Units</th></tr></thead><tbody>
+    ${days.map(d=>{const tot=d.clover+d.nrs+d.other;return `<tr><td style="font-weight:600">${d.date}</td><td class="sub">${dowShort(d.date)}</td><td class="right">${money2(d.clover)}</td><td class="right">${money2(d.nrs)}</td><td class="right" style="font-weight:700">${money2(tot)}</td><td class="right sub">${(d.units||0).toLocaleString()}</td></tr>`;}).join('')}
+  </tbody></table></div>`;
+}
+function salesCloverBody(){
+  const s=(salesData.sum.bySource||{}).clover||{gross:0,net:0,discounts:0,refunds:0,tax:0,tip:0,units:0,orders:0,aov:0};
+  const meta=salesData.meta||{}; const last=meta.cloverLastSync?fTimeAgo(meta.cloverLastSync):'never';
+  const txWrap=salesData.tx||{}; const tx=txWrap.rows||[];
+  // payment mix across the day rows
+  const pay={};(salesData.rows||[]).filter(d=>d.source==='clover').forEach(d=>{const bp=d.byPayment||{};for(const k in bp)pay[k]=(pay[k]||0)+bp[k];});
+  const payRows=Object.entries(pay).sort((a,b)=>b[1]-a[1]);
+  return `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px"><span class="sub" style="align-self:center">Last sync: ${last}</span><button class="btn sec" onclick="salesSyncClover()">↻ Sync now</button><button class="btn sec" onclick="salesResetClover()">Reset & re-pull</button></div>
+   <div class="kpis">
+    ${kpi('Net sales',money2(s.net),'gross − discounts − refunds')}
+    ${kpi('Gross sales',money2(s.gross))}
+    ${kpi('Discounts',money2(s.discounts))}
+    ${kpi('Tax collected',money2(s.tax))}
+    ${kpi('Refunds',money2(s.refunds),null,s.refunds?'#b56a6a':'')}
+    ${kpi('Tips',money2(s.tip||0))}
+    ${kpi('Transactions',(s.orders||0).toLocaleString())}
+    ${kpi('Avg order value',money2(s.aov||0))}
+    ${kpi('Items sold',(s.units||0).toLocaleString())}
+   </div>
+   <div class="grid2">
+     <div class="card"><div class="hd"><b>Payment methods</b></div><div class="bd">${payRows.length?payRows.map(([k,v])=>`<div style="display:flex;justify-content:space-between;font-size:13px;margin:6px 0"><span>${esc(k)}</span><b>${money2(v)}</b></div>`).join(''):'<div class="sub" style="padding:14px">No payments in range.</div>'}</div></div>
+     <div class="card"><div class="hd"><b>Day by day</b></div><div class="bd">${salesDayTable('clover')}</div></div>
+   </div>
+   <div class="card" style="margin-top:16px"><div class="hd"><b>Transactions</b><span class="sub">${(txWrap.total||tx.length).toLocaleString()} in range${(txWrap.total||0)>tx.length?' · showing '+tx.length:''}</span></div><div class="bd" style="padding:2px 14px"><div style="overflow:auto;max-height:520px"><table><thead><tr><th>Time</th><th>#</th><th class="right">Net</th><th class="right">Tax</th><th class="right">Total</th><th>Payment</th><th>Register</th><th>Employee</th></tr></thead><tbody>
+     ${tx.length?tx.map(t=>`<tr><td class="sub" style="white-space:nowrap">${new Date(t.ts).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</td><td class="sub">${esc(t.number)}</td><td class="right" style="font-weight:600">${money2(t.netSales)}</td><td class="right sub">${money2(t.tax)}</td><td class="right">${money2(t.total)}</td><td class="sub">${esc(t.paymentType||'')}${t.refunds>0?' <span class="pill out">refund</span>':''}</td><td class="sub">${esc(t.device||'')}</td><td class="sub">${esc(t.employee||'')}</td></tr>`).join(''):`<tr><td colspan="8" class="sub" style="padding:18px">No transactions in this range. If you expected some, use "Reset & re-pull".</td></tr>`}
+   </tbody></table></div></div></div>`;
+}
+function salesNrsBody(){
+  const s=(salesData.sum.bySource||{}).nrs||{gross:0,net:0,tax:0,units:0,days:0};
+  const rows=(salesData.rows||[]).filter(d=>d.source==='nrs');
+  const today=salesData.today; const hasToday=rows.some(d=>d.date===today);
+  const inRangeToday=(salesData.range.from<=today && salesData.range.to>=today);
+  const lastSync=rows.map(d=>d.syncedAt).filter(Boolean).sort().slice(-1)[0];
+  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+     <span class="sub">NRS sends one report per day by email — it isn’t real-time. ${lastSync?'Last import: '+fTimeAgo(lastSync):'No imports yet.'}</span>
+     <button class="btn sec" onclick="nrsEmailFetchNow()">✉ Fetch from Gmail now</button>
+   </div>
+   ${inRangeToday&&!hasToday?`<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:14px"><div class="bd" style="display:flex;align-items:center;gap:10px"><span class="pill low">Pending</span><span>Today’s NRS report (${today}) hasn’t arrived/imported yet. It posts once the daily email is received.</span></div></div>`:''}
+   <div class="kpis">
+    ${kpi('Net sales',money2(s.net),SALES_PRESETS.find(p=>p[0]===salesRangeKey)[1])}
+    ${kpi('Gross sales',money2(s.gross))}
+    ${kpi('Items sold',(s.units||0).toLocaleString())}
+    ${kpi('Days reported',(s.days||0)+(inRangeToday&&!hasToday?' · today pending':''))}
+   </div>
+   <div class="card"><div class="hd"><b>Daily reports</b><span class="sub">browse by business date</span></div><div class="bd"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Day</th><th class="right">Net sales</th><th class="right">Taxable</th><th class="right">Non-taxable</th><th class="right">Units</th><th>Status</th></tr></thead><tbody>
+     ${rows.length?rows.map(d=>`<tr><td style="font-weight:600">${d.date}</td><td class="sub">${dowShort(d.date)}</td><td class="right" style="font-weight:700">${money2(d.net)}</td><td class="right sub">${d.taxable?money2(d.taxable):'—'}</td><td class="right sub">${d.nonTaxable?money2(d.nonTaxable):'—'}</td><td class="right">${(d.units||0).toLocaleString()}</td><td><span class="pill in">Imported</span>${d.syncedAt?` <span class="sub" style="font-size:11px">${fTimeAgo(d.syncedAt)}</span>`:''}</td></tr>`).join(''):`<tr><td colspan="7" class="sub" style="padding:18px">No NRS reports in this range yet.</td></tr>`}
+   </tbody></table></div></div></div>`;
+}
 function finCogs(days){const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let cogs=0;(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=byId[e.productId];if(p)cogs+=Math.abs(e.qtyChange)*(p.costPrice||0);});return cogs;}
 function viewFinance(){
   const tabs=[['overview','Overview'],['revenue','Revenue'],['expenses','Expenses'],['cashflow','Cash flow'],['payables','Payables'],['tax','Sales tax'],['reports','Reports']];
