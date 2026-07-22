@@ -263,11 +263,11 @@ function donut(score){
 }
 
 function viewOverview(){
-  const D=overviewData(overviewRange);const per=overviewRange==='today'?'today':rangeLabel(overviewRange);const suf=overviewRange==='today'?'today':('· '+rangeLabel(overviewRange));
+  const D=overviewData(salesRangeKey);const per=salesRangeKey==='today'?'today':rangeLabel(salesRangeKey);const suf=salesRangeKey==='today'?'today':('· '+rangeLabel(salesRangeKey));
   const hi=new Date().getHours();const greet=hi<12?'Good morning':hi<18?'Good afternoon':'Good evening';
   const today=new Date().toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
-  const H=D.health;const chart=D.today?(D.rev>0?hourChart(D.hours):''):(D.rev>0?dayBars(D.byDay,overviewRange):'');
-  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">${greet} — ${today} <small>Store open · <span class="dot"></span>NRS synced · <span class="dot"></span>Clover synced</small></h1>${rangeSeg(overviewRange,'setOverviewRange')}</div>
+  const H=D.health;const chart=D.today?(D.rev>0?hourChart(D.hours):''):(D.rev>0?dayBars(D.byDay,salesRangeKey):'');
+  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">${greet} — ${today} <small>Store open · <span class="dot"></span>NRS synced · <span class="dot"></span>Clover synced</small></h1>${salesRangeChips()}</div>
   <div class="kpis">
     <div class="kpi"><div class="t">Revenue ${suf}</div><div class="v">${money(D.rev)}</div><div class="s">${D.units.toLocaleString()} items sold</div></div>
     <div class="kpi"><div class="t">Net profit <span class="sub">(est.)</span></div><div class="v">${money(D.net)}</div><div class="s">${D.margin.toFixed(0)}% margin</div></div>
@@ -278,7 +278,7 @@ function viewOverview(){
   </div>
 
   <div class="grid2">
-    <div class="card"><div class="hd"><b>${D.today?'Sales by hour':'Revenue trend · '+rangeLabel(overviewRange)}</b></div>
+    <div class="card"><div class="hd"><b>${D.today?'Sales by hour':'Revenue trend · '+rangeLabel(salesRangeKey)}</b></div>
       <div class="bd">${chart||`<div style="padding:30px;text-align:center;color:#9aa1ad">No sales recorded ${per}. Sync Clover / import NRS to populate.</div>`}
         <div class="sub" style="margin-top:6px">NRS register <b style="color:#161a26">${money2(D.chan.NRS)}</b> · Clover register <b style="color:#161a26">${money2(D.chan.Clover)}</b> · Website <b style="color:#161a26">${money2(D.chan.Web)}</b></div>
       </div></div>
@@ -292,7 +292,7 @@ function viewOverview(){
   </div>
 
   <div class="grid2" style="margin-top:16px">
-    <div class="card"><div class="hd"><b>Fast movers · ${rangeLabel(overviewRange)}</b><a class="sub" style="color:var(--blue);font-weight:700;cursor:pointer" onclick="go('products')">View all products →</a></div>
+    <div class="card"><div class="hd"><b>Fast movers · ${rangeLabel(salesRangeKey)}</b><a class="sub" style="color:var(--blue);font-weight:700;cursor:pointer" onclick="go('products')">View all products →</a></div>
       <div class="bd"><table><thead><tr><th>Product</th><th>On hand</th><th>Status</th><th>Price</th><th>Location</th></tr></thead><tbody>
         ${D.fast.length?D.fast.map(x=>{const p=x.p;const s=stockState(p);return `<tr>
           <td style="font-weight:600"><span class="thumb" style="vertical-align:middle;margin-right:8px">${p.image?`<img src="${esc(p.image)}" style="width:100%;height:100%;object-fit:contain;border-radius:6px">`:'▪'}</span>${esc(p.name)} <span class="sub">${esc(p.sku||'')}</span></td>
@@ -639,7 +639,7 @@ async function cloverRebuild(){if(!confirm('Rebuild 90 days of Clover revenue? T
 /* ======================= PHASE 3 MODULES ======================= */
 let salesPeriod=30, salesRange=30, overviewRange='today', aiOut='', aiTitle='', aiQ='', financeTab='overview';
 const EXP_CATS=['Rent','Utilities','Payroll','Insurance','Software & POS','Marketing','Maintenance','Repairs','Supplies','Bank & card fees','Shipping','Taxes & licenses','Other'];
-function expensesForPeriod(days){const cut=Date.now()-days*864e5;let total=0,fixed=0,variable=0;const byCat={};
+function expensesForPeriod(days){if(typeof days==='string')days=presetDays(days);const cut=Date.now()-days*864e5;let total=0,fixed=0,variable=0;const byCat={};
   (S.expenses||[]).forEach(x=>{let amt=0;if(x.recurring)amt=(x.amount||0)*(days/30);else{const t=x.date?new Date(x.date).getTime():0;if(t>=cut)amt=(x.amount||0);}if(!amt)return;total+=amt;if(x.type==='fixed')fixed+=amt;else variable+=amt;byCat[x.category||'Other']=(byCat[x.category||'Other']||0)+amt;});
   return {total,fixed,variable,byCat};}
 const CH_COLOR={Clover:'#7cae90',NRS:'#7d93df',Website:'#d0a94e',Other:'#b6bcc6'};
@@ -648,15 +648,15 @@ function donutMulti(parts,size){size=size||128;const R=size/2,cx=R,cy=R,r=R*0.6;
   const active=parts.filter(p=>p.value>0);
   if(active.length===1){return `<svg viewBox="0 0 ${size} ${size}" style="width:${size}px;height:${size}px"><circle cx="${cx}" cy="${cy}" r="${R}" fill="${active[0].color}"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="#fff"/></svg>`;}
   let a0=-Math.PI/2,segs='';parts.forEach(p=>{const frac=p.value/tot;if(frac<=0)return;const a1=a0+frac*2*Math.PI;const x0=cx+R*Math.cos(a0),y0=cy+R*Math.sin(a0),x1=cx+R*Math.cos(a1),y1=cy+R*Math.sin(a1);const xr0=cx+r*Math.cos(a1),yr0=cy+r*Math.sin(a1),xr1=cx+r*Math.cos(a0),yr1=cy+r*Math.sin(a0);const lg=frac>.5?1:0;segs+=`<path d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${R} ${R} 0 ${lg} 1 ${x1.toFixed(1)} ${y1.toFixed(1)} L${xr0.toFixed(1)} ${yr0.toFixed(1)} A${r} ${r} 0 ${lg} 0 ${xr1.toFixed(1)} ${yr1.toFixed(1)} Z" fill="${p.color}"/>`;a0=a1;});return `<svg viewBox="0 0 ${size} ${size}" style="width:${size}px;height:${size}px">${segs}</svg>`}
-function dayBars(byDay,days){const now=new Date();const arr=[];for(let i=days-1;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i);arr.push({d,v:byDay[d.toISOString().slice(0,10)]||0});}
+function dayBars(byDay,days){if(typeof days==='string')days=presetDays(days);days=Math.min(days,120);const now=new Date();const arr=[];for(let i=days-1;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i);arr.push({d,v:byDay[d.toISOString().slice(0,10)]||0});}
   const max=Math.max(1,...arr.map(a=>a.v));const W=760,H=178,padL=46,padR=8,padT=8,padB=22,plotW=W-padL-padR,plotH=H-padT-padB,L=4;
   let grid='';for(let i=0;i<=L;i++){const y=padT+plotH*(i/L);const val=max*(1-i/L);grid+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#eef0f4" stroke-width="1"/><text x="${padL-8}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#aab0bb">${max>=1000?'$'+ (Math.round(val/100)/10)+'k':'$'+Math.round(val)}</text>`;}
   const bw=plotW/arr.length-2;let bars='';arr.forEach((a,i)=>{const h=Math.max(1,a.v/max*plotH);const x=padL+i*(plotW/arr.length);bars+=`<rect x="${x.toFixed(1)}" y="${(padT+plotH-h).toFixed(1)}" width="${Math.max(1,bw).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="#aeb9e8"/>`;});
   let xl='';const step=Math.max(1,Math.ceil(arr.length/6));arr.forEach((a,i)=>{if(i%step===0){const x=padL+i*(plotW/arr.length)+bw/2;xl+=`<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="9.5" fill="#aab0bb">${(a.d.getMonth()+1)+'/'+a.d.getDate()}</text>`;}});
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${grid}${bars}${xl}</svg>`}
 function barList(items,fmt){if(!items.length)return '<div class="sub" style="padding:8px 0">No data in this period.</div>';const max=Math.max(1,...items.map(i=>i.value));return items.map(i=>`<div class="cbar"><span class="nm" style="width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(i.label)}</span><span class="tr"><span class="fl" style="width:${Math.round(i.value/max*100)}%;background:${i.color||'#7d93df'}"></span></span><span class="vl" style="width:78px">${fmt(i.value)}</span></div>`).join('')}
-function rangeStart(range){if(range==='today'){const d=new Date();d.setHours(0,0,0,0);return d.getTime();}return Date.now()-(range||30)*864e5;}
-function rangeLabel(range){return range==='today'?'today':('last '+range+' days');}
+function rangeStart(range){if(typeof range==='string' && SALES_PRESETS.some(p=>p[0]===range)) return winOf(range).fromMs;if(range==='today'){const d=new Date();d.setHours(0,0,0,0);return d.getTime();}return Date.now()-(range||30)*864e5;}
+function rangeLabel(range){const p=SALES_PRESETS.find(x=>x[0]===range);if(p)return p[1];return range==='today'?'today':('last '+range+' days');}
 function salesAgg(range){const start=rangeStart(range);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let rev=0,units=0,tax=0;const chan={},cat={},byDay={},prod={},dow={},hours=Array(24).fill(0);
   (S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<start)return;const u=Math.abs(e.qtyChange);const p=byId[e.productId];const r=(e.rev!=null)?e.rev:u*(p?(effPrice(p)||0):0);rev+=r;units+=u;tax+=(e.tax||0);const n=e.note||'';const ch=/clover/i.test(n)?'Clover':/nrs/i.test(n)?'NRS':/web/i.test(n)?'Website':'Other';chan[ch]=(chan[ch]||0)+r;const c=(p&&p.category)||'Uncategorized';cat[c]=(cat[c]||0)+r;const d=new Date(e.timestamp);byDay[d.toISOString().slice(0,10)]=(byDay[d.toISOString().slice(0,10)]||0)+r;dow[d.getDay()]=(dow[d.getDay()]||0)+r;hours[d.getHours()]+=r;if(p){const a=prod[p.id]||(prod[p.id]={p,u:0,r:0});a.u+=u;a.r+=r;}});
   // Sync totals to the accurate salesDaily store (Clover-matched). Keep category/product/hour/dow
@@ -671,9 +671,14 @@ function setSalesRange(r){salesRange=r;}
 function setOverviewRange(r){overviewRange=r;}
 /* ---- Shared accurate aggregator: reads the SAME salesDaily store the Sales tab uses, so Overview,
         Sales and Finance always agree with Clover. Overrides the legacy event-based totals. ---- */
-function rangeYmd(range){const now=new Date();const to=ymdLocal(now);
+function rangeYmd(range){
+  if(typeof range==='string' && SALES_PRESETS.some(p=>p[0]===range)) return salesRangeDates(range);   // unified presets
+  const now=new Date();const to=ymdLocal(now);
   if(range==='today'){return {from:to,to};}
   const n=Number(range)||30;const s=new Date(now);s.setDate(s.getDate()-(n-1));return {from:ymdLocal(s),to};}
+function winOf(key){const r=rangeYmd(key);const fromMs=new Date(r.from+'T00:00:00').getTime();const toMs=new Date(r.to+'T23:59:59.999').getTime();const days=Math.round((new Date(r.to+'T12:00:00')-new Date(r.from+'T12:00:00'))/864e5)+1;return {from:r.from,to:r.to,fromMs,toMs,days};}
+function presetDays(key){return winOf(key).days;}
+function prevNet(key){const w=winOf(key);const pe=new Date(w.from+'T12:00:00');pe.setDate(pe.getDate()-1);const ps=new Date(pe);ps.setDate(ps.getDate()-(w.days-1));return dailyAggClient(ymdLocal(ps),ymdLocal(pe)).net;}
 function dailyAggClient(from,to){
   const out={net:0,gross:0,tax:0,units:0,orders:0,bySource:{},byDay:{},has:false};
   const sd=S.salesDaily||{};
@@ -825,17 +830,17 @@ function salesNrsBody(){
      ${rows.length?rows.map(d=>`<tr><td style="font-weight:600">${d.date}</td><td class="sub">${dowShort(d.date)}</td><td class="right" style="font-weight:700">${money2(d.net)}</td><td class="right sub">${d.taxable?money2(d.taxable):'—'}</td><td class="right sub">${d.nonTaxable?money2(d.nonTaxable):'—'}</td><td class="right">${(d.units||0).toLocaleString()}</td><td><span class="pill in">Imported</span>${d.syncedAt?` <span class="sub" style="font-size:11px">${fTimeAgo(d.syncedAt)}</span>`:''}</td></tr>`).join(''):`<tr><td colspan="7" class="sub" style="padding:18px">No NRS reports in this range yet.</td></tr>`}
    </tbody></table></div></div></div>`;
 }
-function finCogs(days){const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let cogs=0;(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=byId[e.productId];if(p)cogs+=Math.abs(e.qtyChange)*(p.costPrice||0);});return cogs;}
+function finCogs(days){if(typeof days==='string')days=presetDays(days);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let cogs=0;(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=byId[e.productId];if(p)cogs+=Math.abs(e.qtyChange)*(p.costPrice||0);});return cogs;}
 function viewFinance(){
   const tabs=[['overview','Overview'],['revenue','Revenue'],['expenses','Expenses'],['cashflow','Cash flow'],['payables','Payables'],['tax','Sales tax'],['reports','Reports']];
-  const head=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Finance</h1>${periodSeg()}</div>
+  const head=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Finance</h1>${salesRangeChips()}</div>
    <div class="seg" style="margin:14px 0 6px;flex-wrap:wrap">${tabs.map(t=>`<button class="${financeTab===t[0]?'on':''}" onclick="financeTab='${t[0]}';render()">${t[1]}</button>`).join('')}</div>`;
   const map={overview:financeOverview,revenue:financeRevenue,expenses:financeExpenses,cashflow:financeCashflow,payables:financePayables,tax:financeTax,reports:financeReports};
   return head+(map[financeTab]||financeOverview)();
 }
 function pnlRow(label,val,strong){const neg=val<0;return `<div class="drow" style="${strong?'font-weight:700;':''}"><span>${esc(label)}</span><b style="color:${neg?'#b56a6a':'#161a26'}">${neg?'−'+money(-val):money(val)}</b></div>`}
 function financeOverview(){
-  const days=salesPeriod;const a=salesAgg(days);const cogs=finCogs(days);const gp=a.rev-cogs;const ex=expensesForPeriod(days);const net=gp-ex.total;
+  const days=salesRangeKey;const a=salesAgg(days);const cogs=finCogs(days);const gp=a.rev-cogs;const ex=expensesForPeriod(days);const net=gp-ex.total;
   const gm=a.rev?gp/a.rev*100:0;const nm=a.rev?net/a.rev*100:0;
   const expParts=[{label:'Fixed',value:ex.fixed,color:'#7d93df'},{label:'Variable',value:ex.variable,color:'#d0a94e'}].filter(p=>p.value>0);
   const catById={};(S.products||[]).forEach(p=>catById[p.id]=p);const cat={};
@@ -897,17 +902,17 @@ function financeExpenses(){
     ${X.length?X.map(x=>`<tr><td style="font-weight:600">${esc(x.name)}</td><td class="sub">${esc(x.category||'—')}</td><td>${x.type==='fixed'?'<span class="pill over">Fixed</span>':'<span class="pill low">Variable</span>'}</td><td class="sub">${x.recurring?'Monthly':(x.date?new Date(x.date).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'One-time')}</td><td class="right" style="font-weight:600">${money(x.amount||0)}${x.recurring?'<span class="sub" style="font-weight:400">/mo</span>':''}</td><td class="right"><button class="btn sec sm" onclick="editExpense('${x.id}')">Edit</button></td></tr>`).join(''):`<tr><td colspan="6" class="sub" style="padding:26px;text-align:center">No expenses yet. Add rent, utilities (Con Ed), payroll, insurance, POS/software fees, maintenance, repairs, card fees…</td></tr>`}
    </tbody></table></div></div></div>`;
 }
-function financeTax(){const a=salesAgg(salesPeriod);
+function financeTax(){const a=salesAgg(salesRangeKey);
   return `<div class="kpis">
-    <div class="kpi"><div class="t">Sales tax collected</div><div class="v">${money(a.tax)}</div><div class="s">last ${salesPeriod} days · Clover</div></div>
+    <div class="kpi"><div class="t">Sales tax collected</div><div class="v">${money(a.tax)}</div><div class="s">${rangeLabel(salesRangeKey)} · Clover</div></div>
     <div class="kpi"><div class="t">Taxed revenue (est.)</div><div class="v">${money(a.rev)}</div></div>
    </div>
    <div class="card"><div class="bd sub">Clover records tax per order, captured on each sale and totaled here. NRS per-item tax isn't in its CSV — the NRS daily email has a "Taxes Collected" summary you can enter manually later. A sales-tax filing export (by period) will live on this page.</div></div>`;
 }
 function revBetween(fromDaysAgo,toDaysAgo){const now=Date.now();const lo=now-fromDaysAgo*864e5,hi=now-toDaysAgo*864e5;const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let rev=0;(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<lo||t>=hi)return;const p=byId[e.productId];rev+=(e.rev!=null)?e.rev:Math.abs(e.qtyChange)*(p?(effPrice(p)||0):0);});return rev;}
-function invPurchases(days){const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let c=0;(S.events||[]).forEach(e=>{if(e.qtyChange<=0)return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=byId[e.productId];if(p)c+=e.qtyChange*(p.costPrice||0);});return c;}
+function invPurchases(days){if(typeof days==='string')days=presetDays(days);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let c=0;(S.events||[]).forEach(e=>{if(e.qtyChange<=0)return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=byId[e.productId];if(p)c+=e.qtyChange*(p.costPrice||0);});return c;}
 function financeRevenue(){
-  const days=salesPeriod;const a=salesAgg(days);const prev=revBetween(days*2,days);const growth=prev>0?((a.rev-prev)/prev*100):null;
+  const days=salesRangeKey;const a=salesAgg(days);const prev=prevNet(days);const growth=prev>0?((a.rev-prev)/prev*100):null;
   const chan=Object.entries(a.chan).sort((x,y)=>y[1]-x[1]);
   const cats=Object.entries(a.cat).map(([k,v])=>({label:k,value:v})).sort((x,y)=>y.value-x.value).slice(0,8);
   return `<div class="kpis">
@@ -926,7 +931,7 @@ function financeRevenue(){
    </div>`;
 }
 function financeCashflow(){
-  const days=salesPeriod;const a=salesAgg(days);const ex=expensesForPeriod(days);const buys=invPurchases(days);
+  const days=salesRangeKey;const a=salesAgg(days);const ex=expensesForPeriod(days);const buys=invPurchases(days);
   const inflow=a.rev;const outflow=ex.total+buys;const net=inflow-outflow;
   return `<div class="kpis">
     <div class="kpi"><div class="t">Cash in</div><div class="v" style="color:#4f8f6a">${money(inflow)}</div><div class="s">sales, last ${days} days</div></div>
@@ -966,14 +971,14 @@ function financePayables(){
    </div>
    ${bills.length?`<div class="card" style="margin-top:16px"><div class="hd"><b>Recurring bills (monthly)</b></div><div class="bd"><table><thead><tr><th>Bill</th><th>Category</th><th class="right">Amount</th></tr></thead><tbody>${bills.map(x=>`<tr><td style="font-weight:600">${esc(x.name)}</td><td class="sub">${esc(x.category||'—')}</td><td class="right">${money(x.amount||0)}/mo</td></tr>`).join('')}</tbody></table></div></div>`:''}`;
 }
-function exportPnl(){const days=salesPeriod;const a=salesAgg(days);const cogs=finCogs(days);const gp=a.rev-cogs;const ex=expensesForPeriod(days);const net=gp-ex.total;
+function exportPnl(){const days=salesRangeKey;const a=salesAgg(days);const cogs=finCogs(days);const gp=a.rev-cogs;const ex=expensesForPeriod(days);const net=gp-ex.total;
   const rows=[['Line','Amount'].join(','),['Revenue',a.rev.toFixed(2)].join(','),['Cost of goods sold',(-cogs).toFixed(2)].join(','),['Gross profit',gp.toFixed(2)].join(','),['Fixed costs',(-ex.fixed).toFixed(2)].join(','),['Variable costs',(-ex.variable).toFixed(2)].join(','),['Net profit',net.toFixed(2)].join(','),['Sales tax collected',a.tax.toFixed(2)].join(',')];
   download('family-bazar-pnl-'+days+'d.csv',rows.join('\n'));toast('P&L exported');}
 function exportExpenses(){const X=S.expenses||[];const head=['name','category','type','amount','frequency','date'];const rows=[head.join(',')].concat(X.map(x=>[csvEsc(x.name),csvEsc(x.category),x.type,x.amount,x.recurring?'monthly':'one-time',csvEsc(x.date||'')].join(',')));download('family-bazar-expenses.csv',rows.join('\n'));toast('Expenses exported');}
 function financeReports(){
   return `<div class="grid2">
     <div class="card"><div class="hd"><b>Financial exports</b></div><div class="bd">
-      <p class="sub" style="margin-top:0">Download for Excel or your accountant. The P&amp;L uses the selected period (${salesPeriod} days).</p>
+      <p class="sub" style="margin-top:0">Download for Excel or your accountant. The P&amp;L uses the selected period (${rangeLabel(salesRangeKey)}).</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="exportPnl()">Export P&amp;L CSV</button><button class="btn sec" onclick="exportExpenses()">Export expenses CSV</button><button class="btn sec" onclick="exportSales()">Export sales CSV</button></div>
     </div></div>
     <div class="card"><div class="hd"><b>Coming to finance reports</b></div><div class="bd sub">Monthly P&amp;L comparison, sales-tax filing worksheet, supplier spend history, and QuickBooks / Xero export as those integrations come online.</div></div>
@@ -1371,17 +1376,17 @@ function exportProducts(){const P=S.products||[];const head=['name','sku','barco
 function exportSales(){const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);const rows=[['date','product','type','qtyChange','revenue','tax','note'].join(',')];(S.events||[]).forEach(e=>{const p=byId[e.productId];rows.push([e.timestamp,csvEsc(p?p.name:''),e.type,e.qtyChange,(e.rev!=null?e.rev:''),(e.tax!=null?e.tax:''),csvEsc(e.note)].join(','));});download('family-bazar-sales.csv',rows.join('\n'));toast('Exported '+((S.events||[]).length)+' events');}
 function exportInventory(){const P=S.products||[];const head=['name','sku','category','qty','cost','retail','stockValueCost','stockValueRetail'];const rows=[head.join(',')].concat(P.map(p=>{const c=p.costPrice||0,r=effPrice(p)||0,q=p.qty||0;return [csvEsc(p.name),csvEsc(p.sku),csvEsc(p.category),q,c,r,(c*q).toFixed(2),(r*q).toFixed(2)].join(',');}));download('inventory-valuation.csv',rows.join('\n'));toast('Inventory valuation exported');}
 function exportReorder(){const P=(S.products||[]).filter(p=>stockState(p)!=='in');const head=['name','sku','supplier','qty','reorderAt','suggestedOrder','estCost'];const rows=[head.join(',')].concat(P.map(p=>{const q=reorderQty(p);return [csvEsc(p.name),csvEsc(p.sku),csvEsc(p.supplier),p.qty||0,p.reorderThreshold||0,q,((p.costPrice||0)*q).toFixed(2)].join(',');}));download('reorder-report.csv',rows.join('\n'));toast('Reorder report exported');}
-function exportTaxReport(){const a=salesAgg(salesPeriod);const rows=[['metric','value'].join(','),['periodDays',salesPeriod].join(','),['salesTaxCollected',a.tax.toFixed(2)].join(','),['taxedRevenue',a.rev.toFixed(2)].join(',')];download('sales-tax-summary.csv',rows.join('\n'));toast('Tax summary exported');}
+function exportTaxReport(){const a=salesAgg(salesRangeKey);const rows=[['metric','value'].join(','),['period',rangeLabel(salesRangeKey)].join(','),['salesTaxCollected',a.tax.toFixed(2)].join(','),['taxedRevenue',a.rev.toFixed(2)].join(',')];download('sales-tax-summary.csv',rows.join('\n'));toast('Tax summary exported');}
 function exportCustomers(){const C=S.customers||[];const head=['name','phone','email','points','tier'];const rows=[head.join(',')].concat(C.map(c=>[csvEsc(c.name),csvEsc(c.phone),csvEsc(c.email),c.points||0,csvEsc(c.tier||'Member')].join(',')));download('customers.csv',rows.join('\n'));toast('Customers exported');}
 function exportDead(){const cut=Date.now()-45*864e5;const P=(S.products||[]).filter(p=>(p.qty||0)>0&&(!p.lastSale||new Date(p.lastSale).getTime()<cut));const head=['name','sku','qty','cost','tiedUpCost','lastSold'];const rows=[head.join(',')].concat(P.map(p=>[csvEsc(p.name),csvEsc(p.sku),p.qty||0,p.costPrice||0,((p.costPrice||0)*(p.qty||0)).toFixed(2),p.lastSale?new Date(p.lastSale).toISOString().slice(0,10):''].join(',')));download('dead-stock.csv',rows.join('\n'));toast('Dead stock exported');}
-function exportChannelReport(){const a=salesAgg(salesPeriod);const rows=[['channel','revenue'].join(',')].concat(Object.entries(a.chan).map(([k,v])=>[csvEsc(k),v.toFixed(2)].join(',')));download('channel-performance.csv',rows.join('\n'));toast('Channel report exported');}
+function exportChannelReport(){const a=salesAgg(salesRangeKey);const rows=[['channel','revenue'].join(',')].concat(Object.entries(a.chan).map(([k,v])=>[csvEsc(k),v.toFixed(2)].join(',')));download('channel-performance.csv',rows.join('\n'));toast('Channel report exported');}
 function viewReports(){
-  const a=salesAgg(salesPeriod);
+  const a=salesAgg(salesRangeKey);
   const rep=(t,d,fn)=>`<div class="card"><div class="bd"><b>${t}</b><p class="sub" style="margin:6px 0 12px;min-height:34px">${d}</p><button class="btn sec sm" onclick="${fn}">Download CSV</button></div></div>`;
-  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Reports</h1>${periodSeg()}</div>
+  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Reports</h1>${salesRangeChips()}</div>
    <div class="kpis">
-    <div class="kpi"><div class="t">${salesPeriod}-day revenue</div><div class="v">${money(a.rev)}</div></div>
-    <div class="kpi"><div class="t">${salesPeriod}-day items</div><div class="v">${a.units.toLocaleString()}</div></div>
+    <div class="kpi"><div class="t">${rangeLabel(salesRangeKey)} revenue</div><div class="v">${money(a.rev)}</div></div>
+    <div class="kpi"><div class="t">${rangeLabel(salesRangeKey)} items</div><div class="v">${a.units.toLocaleString()}</div></div>
     <div class="kpi"><div class="t">Products</div><div class="v">${(S.products||[]).length.toLocaleString()}</div></div>
     <div class="kpi"><div class="t">Customers</div><div class="v">${(S.customers||[]).length.toLocaleString()}</div></div>
    </div>
