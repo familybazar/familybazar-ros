@@ -1,0 +1,14 @@
+{
+  "name": "family-bazar-ros",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Family Bazar Retail OS — zero-dependency Node server (products, inventory, receiving, fulfillment, marketing, website connector).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node check-preview.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,29 @@
+# Render blueprint for Family Bazar ROS.
+# In Render: New → Blueprint → connect this repo. It reads this file.
+# The persistent disk keeps data.json + secrets.json across restarts and deploys.
+#
+# NOTE: a persistent disk requires a paid instance (Starter, ~$7/mo). The free tier has NO persistent
+# disk and sleeps when idle, so the catalog would reset — fine for a short review, not for the store.
+services:
+  - type: web
+    name: family-bazar-ros
+    runtime: node
+    plan: starter
+    region: ohio
+    startCommand: node server.js
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: ROS_DATA_DIR
+        value: /var/data
+      - key: NODE_VERSION
+        value: "20"
+      # Secrets are set in the Render dashboard (Environment), NOT here. Suggested keys:
+      #   ROS_AUTH            = 1            (turn on logins for the final, non-review deploy)
+      #   ROS_OWNER_PASSWORD  = <chosen>     (seeds the owner login on first boot)
+      #   ROS_SECRETS_JSON    = {"aiApiKey":"...","cloverApiToken":"...","cloverMerchantId":"...",
+      #                          "imapUser":"...","imapPass":"...","platformSecret":"..."}
+    disk:
+      name: ros-data
+      mountPath: /var/data
+      sizeGB: 1

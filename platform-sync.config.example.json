@@ -1,0 +1,6 @@
+{
+  "url": "https://YOUR-PLATFORM.vercel.app/api/connector/sync",
+  "secret": "REPLACE-WITH-THE-SAME-VALUE-AS-ROS_SYNC_SECRET-ON-THE-PLATFORM",
+  "locationCode": "brooklyn-liberty",
+  "batchSize": 500
+}

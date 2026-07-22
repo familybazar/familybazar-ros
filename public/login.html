@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Bazar — Sign in</title>
+<style>
+  :root{ --bg:#f5f6f8; --card:#fff; --line:#ececf0; --ink:#161a26; --muted:#6b7280; --blue:#2447d6; }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);
+    color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:30px 28px;width:340px;
+    box-shadow:0 1px 2px rgba(16,24,40,.04),0 12px 34px rgba(16,24,40,.08)}
+  .brand{display:flex;align-items:center;gap:11px;margin-bottom:22px}
+  .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--blue),#4f6bff);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px}
+  .brand b{font-size:16px;line-height:1.1;display:block}
+  .brand span{font-size:11px;color:var(--muted);letter-spacing:.6px;font-weight:700}
+  label{font-size:12.5px;font-weight:700;color:#3d4353;display:block;margin:14px 0 6px}
+  input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:11px;font-size:14px;outline:none}
+  input:focus{border-color:var(--blue);box-shadow:0 0 0 3px #eef2ff}
+  button{width:100%;margin-top:20px;padding:12px;border:0;border-radius:11px;background:var(--blue);color:#fff;
+    font-weight:800;font-size:14px;cursor:pointer}
+  button:disabled{opacity:.6}
+  .err{color:#dc2626;font-size:12.5px;font-weight:600;margin-top:12px;min-height:16px}
+  .hint{color:var(--muted);font-size:11.5px;margin-top:16px;text-align:center}
+</style>
+</head>
+<body>
+  <form class="card" id="f" onsubmit="return doLogin(event)">
+    <div class="brand"><div class="logo">FB</div><div><b>Family Bazar</b><span>RETAIL OS</span></div></div>
+    <label for="u">Username</label>
+    <input id="u" autocomplete="username" autofocus>
+    <label for="p">Password</label>
+    <input id="p" type="password" autocomplete="current-password">
+    <button id="btn" type="submit">Sign in</button>
+    <div class="err" id="err"></div>
+    <div class="hint">Owner, manager and staff use their own login.</div>
+  </form>
+<script>
+async function doLogin(e){
+  e.preventDefault();
+  const btn=document.getElementById('btn'), err=document.getElementById('err');
+  err.textContent=''; btn.disabled=true; btn.textContent='Signing in…';
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({username:document.getElementById('u').value,password:document.getElementById('p').value})});
+    const d=await r.json();
+    if(!r.ok){ err.textContent=d.error||'Sign in failed'; btn.disabled=false; btn.textContent='Sign in'; return false; }
+    window.location.href='/';
+  }catch(x){ err.textContent='Network error — is the server running?'; btn.disabled=false; btn.textContent='Sign in'; }
+  return false;
+}
+</script>
+</body>
+</html>

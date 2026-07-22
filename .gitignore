@@ -1,0 +1,28 @@
+# Secrets — NEVER commit these
+secrets.json
+platform-sync.config.json
+.env
+.env.local
+*.key
+keys.json
+
+# Business / customer data (regenerated locally; may contain PII)
+data.json
+data.backup*.json
+data-backup*.json
+secrets*.json
+
+# Uploaded / dropped files (invoices, NRS reports) — may contain PII
+invoices/
+uploads/
+nrs-inbox/
+*.pdf
+
+# Runtime
+node_modules/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
