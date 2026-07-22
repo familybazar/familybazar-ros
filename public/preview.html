@@ -672,7 +672,7 @@ function ymdLocal(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(
 function salesRangeDates(key){const now=new Date();const t=ymdLocal(now);
   if(key==='today')return{from:t,to:t};
   if(key==='yesterday'){const y=new Date(now);y.setDate(y.getDate()-1);const s=ymdLocal(y);return{from:s,to:s};}
-  if(key==='week'){const w=new Date(now);const dow=(w.getDay()+6)%7;w.setDate(w.getDate()-dow);return{from:ymdLocal(w),to:t};}
+  if(key==='week'){const w=new Date(now);w.setDate(w.getDate()-w.getDay());return{from:ymdLocal(w),to:t};}  // Sunday-start, matches Clover
   if(key==='last7'){const s=new Date(now);s.setDate(s.getDate()-6);return{from:ymdLocal(s),to:t};}
   if(key==='last30'){const s=new Date(now);s.setDate(s.getDate()-29);return{from:ymdLocal(s),to:t};}
   if(key==='month'){const s=new Date(now.getFullYear(),now.getMonth(),1);return{from:ymdLocal(s),to:t};}
