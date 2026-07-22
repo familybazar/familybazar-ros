@@ -637,7 +637,7 @@ async function cloverSync(){toast('Syncing Clover…');try{const r=await fetch('
 async function cloverRebuild(){if(!confirm('Rebuild 90 days of Clover revenue? This recalculates sales but does not change stock.'))return;toast('Rebuilding Clover revenue…');try{const r=await fetch('/api/clover/rebuild',{method:'POST'});const d=await r.json();if(d.error)throw new Error(d.error);await load();render();toast('Rebuilt '+(d.orders||0)+' orders · net $'+(d.revenue||0).toFixed(0))}catch(e){toast('Rebuild failed: '+(e.message||e))}}
 
 /* ======================= PHASE 3 MODULES ======================= */
-let salesPeriod=30, salesRange=30, overviewRange='today', aiOut='', aiTitle='', aiQ='', financeTab='overview';
+let salesPeriod=30, salesRange=30, overviewRange='today', aiOut='', aiTitle='', aiQ='', financeTab='overview', financeMode='auto', mfBook='general';
 const EXP_CATS=['Rent','Utilities','Payroll','Insurance','Software & POS','Marketing','Maintenance','Repairs','Supplies','Bank & card fees','Shipping','Taxes & licenses','Other'];
 function expensesForPeriod(days){if(typeof days==='string')days=presetDays(days);const cut=Date.now()-days*864e5;let total=0,fixed=0,variable=0;const byCat={};
   (S.expenses||[]).forEach(x=>{let amt=0;if(x.recurring)amt=(x.amount||0)*(days/30);else{const t=x.date?new Date(x.date).getTime():0;if(t>=cut)amt=(x.amount||0);}if(!amt)return;total+=amt;if(x.type==='fixed')fixed+=amt;else variable+=amt;byCat[x.category||'Other']=(byCat[x.category||'Other']||0)+amt;});
@@ -832,11 +832,152 @@ function salesNrsBody(){
 }
 function finCogs(days){if(typeof days==='string')days=presetDays(days);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let cogs=0;(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=byId[e.productId];if(p)cogs+=Math.abs(e.qtyChange)*(p.costPrice||0);});return cogs;}
 function viewFinance(){
-  const tabs=[['overview','Overview'],['revenue','Revenue'],['expenses','Expenses'],['cashflow','Cash flow'],['payables','Payables'],['tax','Sales tax'],['reports','Reports']];
+  const modes=[['auto','Automated'],['manual','Manual'],['compare','Comparison']];
   const head=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Finance</h1>${salesRangeChips()}</div>
-   <div class="seg" style="margin:14px 0 6px;flex-wrap:wrap">${tabs.map(t=>`<button class="${financeTab===t[0]?'on':''}" onclick="financeTab='${t[0]}';render()">${t[1]}</button>`).join('')}</div>`;
+   <div class="seg" style="margin:14px 0 6px">${modes.map(m=>`<button class="${financeMode===m[0]?'on':''}" onclick="financeMode='${m[0]}';render()">${m[1]}</button>`).join('')}</div>`;
+  if(financeMode==='manual') return head+viewManualFinance();
+  if(financeMode==='compare') return head+viewFinanceCompare();
+  const tabs=[['overview','Overview'],['revenue','Revenue'],['expenses','Expenses'],['cashflow','Cash flow'],['payables','Payables'],['tax','Sales tax'],['reports','Reports']];
+  const sub=`<div class="seg" style="margin:6px 0 8px;flex-wrap:wrap">${tabs.map(t=>`<button class="${financeTab===t[0]?'on':''}" onclick="financeTab='${t[0]}';render()">${t[1]}</button>`).join('')}</div>`;
   const map={overview:financeOverview,revenue:financeRevenue,expenses:financeExpenses,cashflow:financeCashflow,payables:financePayables,tax:financeTax,reports:financeReports};
-  return head+(map[financeTab]||financeOverview)();
+  return head+`<div class="sub" style="margin:2px 0 6px">Auto-generated from Clover + NRS + integrations. Becomes the single source of truth as automation (incl. product costs) completes.</div>`+sub+(map[financeTab]||financeOverview)();
+}
+
+/* ============================================================
+   MANUAL FINANCE — owner bookkeeping. Two books: General Cash + Phone Cash (merged separately).
+   Sales entered by hand + projected GP% → estimated gross profit / COGS; categorized expenses.
+   ============================================================ */
+const MF_GROUPS={
+  payroll:{label:'Payroll',cats:['Employee Salary','Weekly Payroll','Bi-weekly Payroll','Bonuses','Overtime']},
+  fixed:{label:'Fixed Expenses',cats:['Rent','Insurance','Electricity','Gas','Water','Internet / Wi-Fi','Phone Bill','Garbage Collection','Cleaning','Security']},
+  taxes:{label:'Taxes',cats:['Payroll Tax','Business Tax','Sales Tax Payments','Other Taxes']},
+  debt:{label:'Debt & Financing',cats:['Loan Payments','Credit Card Payments','Interest','Other Liabilities']},
+  misc:{label:'Miscellaneous',cats:['Repairs','Office Supplies','Equipment','Marketing','Professional Services','Other Expenses']}
+};
+function mfBookLabel(b){return b==='phone'?'Phone Cash':b==='general'?'General Cash':'Merged';}
+function mfEnsure(){ if(!S.manualFinance||typeof S.manualFinance!=='object')S.manualFinance={sales:[],expenses:[],settings:{defaultGpPct:28}}; S.manualFinance.sales=S.manualFinance.sales||[]; S.manualFinance.expenses=S.manualFinance.expenses||[]; S.manualFinance.settings=S.manualFinance.settings||{defaultGpPct:28}; if(S.manualFinance.settings.defaultGpPct==null)S.manualFinance.settings.defaultGpPct=28; return S.manualFinance; }
+function mfDefGp(){return Number(mfEnsure().settings.defaultGpPct)||28;}
+function mfExpAmt(x,w){ if(x.recurring)return (+x.amount||0)*(w.days/30); const t=x.date?new Date(x.date+'T12:00:00').getTime():0; return (t>=w.fromMs&&t<=w.toMs)?(+x.amount||0):0; }
+function mfCompute(book){
+  const w=winOf(salesRangeKey); const mf=mfEnsure();
+  const sales=mf.sales.filter(s=>(book==='merged'||s.book===book) && s.date>=w.from && s.date<=w.to);
+  const salesTot=sales.reduce((a,s)=>a+(+s.amount||0),0);
+  const estGP=sales.reduce((a,s)=>a+(+s.amount||0)*((s.gpPct!=null&&s.gpPct!==''?+s.gpPct:mfDefGp())/100),0);
+  const estCOGS=salesTot-estGP;
+  let expTot=0; const byGroup={}; const exps=mf.expenses.filter(x=>book==='merged'||x.book===book);
+  exps.forEach(x=>{const amt=mfExpAmt(x,w);if(!amt)return;expTot+=amt;const g=x.group||'misc';byGroup[g]=(byGroup[g]||0)+amt;});
+  const estNet=estGP-expTot;
+  return {salesTot,estGP,estCOGS,expTot,estNet,byGroup,margin:salesTot?estNet/salesTot*100:0,gpPct:salesTot?estGP/salesTot*100:mfDefGp(),count:sales.length};
+}
+function mfSummaryCard(book){const c=mfCompute(book);return `<div class="kpi" style="min-width:200px">
+   <div class="t">${mfBookLabel(book)}</div>
+   <div style="display:grid;grid-template-columns:1fr auto;gap:3px 10px;margin-top:6px;font-size:13px">
+     <span class="sub">Sales</span><b>${money2(c.salesTot)}</b>
+     <span class="sub">Est. gross profit</span><b style="color:#4f8f6a">${money2(c.estGP)} <span class="sub" style="font-weight:400">(${Math.round(c.gpPct)}%)</span></b>
+     <span class="sub">Expenses</span><b>${money2(c.expTot)}</b>
+     <span class="sub">Est. net profit</span><b style="color:${c.estNet>=0?'#4f8f6a':'#b56a6a'}">${money2(c.estNet)}</b>
+   </div></div>`;}
+function viewManualFinance(){
+  const mf=mfEnsure();
+  const books=[['general','General Cash'],['phone','Phone Cash']];
+  const c=mfCompute(mfBook);
+  const w=winOf(salesRangeKey);
+  const sales=mf.sales.filter(s=>s.book===mfBook && s.date>=w.from && s.date<=w.to).sort((a,b)=>a.date<b.date?1:-1);
+  const exps=mf.expenses.filter(x=>x.book===mfBook).map(x=>({x,amt:mfExpAmt(x,w)})).filter(o=>o.amt>0).sort((a,b)=>(b.x.date||'')<(a.x.date||'')?1:-1);
+  const grpRows=Object.keys(MF_GROUPS).map(g=>{const t=c.byGroup[g]||0;return t?`<div style="display:flex;justify-content:space-between;font-size:13px;margin:5px 0"><span>${MF_GROUPS[g].label}</span><b>${money2(t)}</b></div>`:'';}).join('')||'<div class="sub" style="padding:8px 0">No expenses in range.</div>';
+  return `<div class="sub" style="margin:2px 0 10px">Owner-maintained bookkeeping. Enter sales + a projected gross-profit % (COGS is estimated until product costs are complete). Two books kept separate, merged below.</div>
+   <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">${mfSummaryCard('general')}${mfSummaryCard('phone')}${mfSummaryCard('merged')}</div>
+   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin:6px 0 8px">
+     <div class="seg">${books.map(b=>`<button class="${mfBook===b[0]?'on':''}" onclick="mfBook='${b[0]}';render()">${b[1]}</button>`).join('')}</div>
+     <div><button class="btn sec" onclick="mfDefGpModal()">Default GP % (${mfDefGp()}%)</button> <button class="btn sec" onclick="mfSaleModal()">+ Add sale</button> <button class="btn" onclick="mfExpModal()">+ Add expense</button></div>
+   </div>
+   <div class="kpis">
+     <div class="kpi"><div class="t">Sales · ${esc(mfBookLabel(mfBook))}</div><div class="v">${money2(c.salesTot)}</div><div class="s">${rangeLabel(salesRangeKey)}</div></div>
+     <div class="kpi"><div class="t">Est. gross profit</div><div class="v" style="color:#4f8f6a">${money2(c.estGP)}</div><div class="s">${Math.round(c.gpPct)}% GP</div></div>
+     <div class="kpi"><div class="t">Est. COGS</div><div class="v">${money2(c.estCOGS)}</div></div>
+     <div class="kpi"><div class="t">Expenses</div><div class="v">${money2(c.expTot)}</div></div>
+     <div class="kpi"><div class="t">Est. net profit</div><div class="v" style="color:${c.estNet>=0?'#4f8f6a':'#b56a6a'}">${money2(c.estNet)}</div><div class="s">${Math.round(c.margin)}% margin</div></div>
+   </div>
+   <div class="grid2">
+     <div class="card"><div class="hd"><b>Sales entries</b><span class="sub">${sales.length}</span></div><div class="bd" style="padding:2px 14px"><div style="overflow:auto;max-height:340px"><table><thead><tr><th>Date</th><th>Channel</th><th class="right">Amount</th><th class="right">GP%</th><th></th></tr></thead><tbody>
+       ${sales.length?sales.map(s=>`<tr><td style="font-weight:600">${esc(s.date)}</td><td class="sub">${esc(s.channel||'—')}</td><td class="right">${money2(s.amount)}</td><td class="right sub">${s.gpPct!=null&&s.gpPct!==''?s.gpPct+'%':mfDefGp()+'%'}</td><td class="right"><button class="btn sec sm" onclick="mfSaleModal('${s.id}')">Edit</button></td></tr>`).join(''):`<tr><td colspan="5" class="sub" style="padding:18px">No sales entered for ${esc(mfBookLabel(mfBook))} in this range.</td></tr>`}
+     </tbody></table></div></div></div>
+     <div class="card"><div class="hd"><b>Expenses by group</b></div><div class="bd">${grpRows}
+       <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:700"><span>Total</span><b>${money2(c.expTot)}</b></div></div></div>
+   </div>
+   <div class="card" style="margin-top:16px"><div class="hd"><b>Expense entries · ${esc(mfBookLabel(mfBook))}</b></div><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Group</th><th>Category</th><th>Frequency</th><th class="right">Amount</th><th></th></tr></thead><tbody>
+     ${exps.length?exps.map(o=>`<tr><td style="font-weight:600">${esc(o.x.date||'—')}</td><td class="sub">${esc((MF_GROUPS[o.x.group]||{}).label||o.x.group||'—')}</td><td>${esc(o.x.category||'—')}</td><td class="sub">${o.x.recurring?'Monthly':'One-time'}</td><td class="right" style="font-weight:600">${money2(o.amt)}</td><td class="right"><button class="btn sec sm" onclick="mfExpModal('${o.x.id}')">Edit</button></td></tr>`).join(''):`<tr><td colspan="6" class="sub" style="padding:18px">No expenses. Add payroll, rent, utilities, taxes, loans…</td></tr>`}
+   </tbody></table></div></div></div>`;
+}
+function mfDefGpModal(){document.getElementById('mdl').innerHTML=`<div class="mh"><b>Default gross-profit %</b><button class="x" onclick="closeModal()">×</button></div>
+   <div class="mb"><div class="sub" style="margin-bottom:8px">Used to estimate gross profit &amp; COGS for any sale entered without its own %.</div>
+     <input id="mf_defgp" type="number" step="0.1" value="${mfDefGp()}" style="width:120px;padding:9px 12px;border:1px solid var(--line);border-radius:10px"> %
+   </div><div class="mf"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" onclick="mfSaveDefGp()">Save</button></div>`;showModal();}
+function mfSaveDefGp(){const v=Number(val('mf_defgp'));mfEnsure().settings.defaultGpPct=isNaN(v)?28:v;save();closeModal();render();toast('Saved');}
+function mfSaleModal(id){const mf=mfEnsure();const s=id?mf.sales.find(x=>x.id===id):null;const bk=s?s.book:(mfBook==='merged'?'general':mfBook);
+  document.getElementById('mdl').innerHTML=`<div class="mh"><b>${id?'Edit':'Add'} sale</b><button class="x" onclick="closeModal()">×</button></div>
+   <div class="mb"><div class="fg">
+     <div class="fld"><label>Date</label><input id="mf_s_date" type="date" value="${s?esc(s.date):new Date().toISOString().slice(0,10)}"></div>
+     <div class="fld"><label>Book</label><select id="mf_s_book"><option value="general" ${bk==='general'?'selected':''}>General Cash</option><option value="phone" ${bk==='phone'?'selected':''}>Phone Cash</option></select></div>
+     <div class="fld"><label>Amount ($)</label><input id="mf_s_amt" type="number" step="0.01" value="${s&&s.amount!=null?s.amount:''}"></div>
+     <div class="fld"><label>Gross profit % (optional)</label><input id="mf_s_gp" type="number" step="0.1" placeholder="default ${mfDefGp()}%" value="${s&&s.gpPct!=null?s.gpPct:''}"></div>
+     <div class="fld full"><label>Channel (optional)</label><input id="mf_s_chan" placeholder="Register / cash / card…" value="${s?esc(s.channel||''):''}"></div>
+   </div></div>
+   <div class="mf">${id?`<button class="btn sec sm" style="margin-right:auto" onclick="mfDelSale('${id}')">Delete</button>`:''}<button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" onclick="mfSaveSale('${id||''}')">Save</button></div>`;showModal();}
+function mfSaveSale(id){const amt=Number(val('mf_s_amt'));if(!amt){toast('Amount required');return}const d={date:val('mf_s_date')||new Date().toISOString().slice(0,10),book:val('mf_s_book'),amount:amt,gpPct:val('mf_s_gp')===''?null:Number(val('mf_s_gp')),channel:val('mf_s_chan')||''};const mf=mfEnsure();if(id){Object.assign(mf.sales.find(x=>x.id===id),d);}else{mf.sales.unshift(Object.assign({id:uid('ms')},d));}save();closeModal();render();toast('Saved');}
+function mfDelSale(id){if(!confirm('Delete this sale entry?'))return;const mf=mfEnsure();mf.sales=mf.sales.filter(x=>x.id!==id);save();closeModal();render();toast('Deleted');}
+function mfExpModal(id){const mf=mfEnsure();const x=id?mf.expenses.find(e=>e.id===id):null;const bk=x?x.book:(mfBook==='merged'?'general':mfBook);const g=x?x.group:'fixed';
+  const catOpts=(grp)=>((MF_GROUPS[grp]||MF_GROUPS.fixed).cats).map(c=>`<option ${x&&x.category===c?'selected':''}>${c}</option>`).join('');
+  document.getElementById('mdl').innerHTML=`<div class="mh"><b>${id?'Edit':'Add'} expense</b><button class="x" onclick="closeModal()">×</button></div>
+   <div class="mb"><div class="fg">
+     <div class="fld"><label>Date</label><input id="mf_e_date" type="date" value="${x&&x.date?esc(x.date):new Date().toISOString().slice(0,10)}"></div>
+     <div class="fld"><label>Book</label><select id="mf_e_book"><option value="general" ${bk==='general'?'selected':''}>General Cash</option><option value="phone" ${bk==='phone'?'selected':''}>Phone Cash</option></select></div>
+     <div class="fld"><label>Group</label><select id="mf_e_group" onchange="mfExpCats()">${Object.keys(MF_GROUPS).map(k=>`<option value="${k}" ${g===k?'selected':''}>${MF_GROUPS[k].label}</option>`).join('')}</select></div>
+     <div class="fld"><label>Category</label><select id="mf_e_cat">${catOpts(g)}</select></div>
+     <div class="fld"><label>Amount ($)</label><input id="mf_e_amt" type="number" step="0.01" value="${x&&x.amount!=null?x.amount:''}"></div>
+     <div class="fld"><label>Frequency</label><select id="mf_e_rec"><option value="0" ${x&&!x.recurring?'selected':(!x?'selected':'')}>One-time (on date)</option><option value="1" ${x&&x.recurring?'selected':''}>Monthly (recurring)</option></select></div>
+     <div class="fld full"><label>Note (optional)</label><input id="mf_e_note" value="${x?esc(x.note||''):''}"></div>
+   </div></div>
+   <div class="mf">${id?`<button class="btn sec sm" style="margin-right:auto" onclick="mfDelExp('${id}')">Delete</button>`:''}<button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" onclick="mfSaveExp('${id||''}')">Save</button></div>`;showModal();}
+function mfExpCats(){const g=val('mf_e_group');const sel=document.getElementById('mf_e_cat');if(sel)sel.innerHTML=((MF_GROUPS[g]||MF_GROUPS.fixed).cats).map(c=>`<option>${c}</option>`).join('');}
+function mfSaveExp(id){const amt=Number(val('mf_e_amt'));if(!amt){toast('Amount required');return}const d={date:val('mf_e_date')||new Date().toISOString().slice(0,10),book:val('mf_e_book'),group:val('mf_e_group'),category:val('mf_e_cat'),amount:amt,recurring:val('mf_e_rec')==='1',note:val('mf_e_note')||''};const mf=mfEnsure();if(id){Object.assign(mf.expenses.find(e=>e.id===id),d);}else{mf.expenses.unshift(Object.assign({id:uid('me')},d));}save();closeModal();render();toast('Saved');}
+function mfDelExp(id){if(!confirm('Delete this expense?'))return;const mf=mfEnsure();mf.expenses=mf.expenses.filter(e=>e.id!==id);save();closeModal();render();toast('Deleted');}
+
+/* ============================================================
+   FINANCE COMPARISON — Automated (POS) vs Manual (owner) for the selected period.
+   ============================================================ */
+function viewFinanceCompare(){
+  const a=salesAgg(salesRangeKey); const autoCogs=finCogs(salesRangeKey); const autoGP=a.rev-autoCogs;
+  const autoExp=expensesForPeriod(salesRangeKey).total; const autoNet=autoGP-autoExp;
+  const m=mfCompute('merged');
+  const hasCost=(S.products||[]).some(p=>Number(p.costPrice)>0);
+  const row=(label,av,mv,fmt)=>{const d=av-mv;const f=fmt||money2;return `<tr><td style="font-weight:600">${label}</td><td class="right">${f(av)}</td><td class="right">${f(mv)}</td><td class="right" style="color:${Math.abs(d)<0.5?'#5b6b7f':(d>=0?'#4f8f6a':'#b56a6a')};font-weight:600">${d>=0?'+':''}${f(d)}</td></tr>`;};
+  const pct=(av,mv)=>{const base=Math.max(Math.abs(av),Math.abs(mv),1);return Math.abs(av-mv)/base*100;};
+  const salesGap=pct(a.rev,m.salesTot);
+  const status = m.salesTot===0 ? ['low','No manual data','Enter manual sales to compare.']
+    : salesGap<3 ? ['in','Aligned','Automated and manual agree within 3%.']
+    : salesGap<10 ? ['low','Minor variance','Within 10% — review the larger days.']
+    : ['out','Needs review','Automated and manual differ by more than 10%.'];
+  const missing=[];
+  if(!hasCost) missing.push('Product costs incomplete → automated COGS/gross profit is understated.');
+  if(m.salesTot===0) missing.push('No manual sales entered for this period.');
+  if(autoExp===0) missing.push('No expenses in the automated system for this period.');
+  return `<div class="sub" style="margin:2px 0 10px">Side-by-side for <b>${rangeLabel(salesRangeKey)}</b>. Automated = Clover + NRS + integrations. Manual = owner bookkeeping (merged books).</div>
+   <div class="kpis">
+     <div class="kpi"><div class="t">Reconciliation</div><div class="v" style="font-size:18px"><span class="pill ${status[0]}">${status[1]}</span></div><div class="s">${status[2]}</div></div>
+     <div class="kpi"><div class="t">Sales difference</div><div class="v" style="color:${Math.abs(a.rev-m.salesTot)<0.5?'#161a26':'#b07508'}">${money2(a.rev-m.salesTot)}</div><div class="s">auto − manual</div></div>
+     <div class="kpi"><div class="t">Est. profit difference</div><div class="v" style="color:${Math.abs(autoNet-m.estNet)<0.5?'#161a26':'#b07508'}">${money2(autoNet-m.estNet)}</div></div>
+   </div>
+   <div class="card"><div class="hd"><b>Automated vs Manual</b></div><div class="bd"><table><thead><tr><th>Metric</th><th class="right">Automated</th><th class="right">Manual</th><th class="right">Difference</th></tr></thead><tbody>
+     ${row('Net sales',a.rev,m.salesTot)}
+     ${row('Gross profit',autoGP,m.estGP)}
+     <tr><td class="sub" style="padding-left:14px">how it's derived</td><td class="right sub">${hasCost?'product costs':'costs incomplete'}</td><td class="right sub">${Math.round(m.gpPct)}% estimate</td><td></td></tr>
+     ${row('Operating expenses',autoExp,m.expTot)}
+     ${row('Net profit',autoNet,m.estNet)}
+   </tbody></table></div></div>
+   <div class="card" style="margin-top:16px"><div class="hd"><b>Missing data / to reconcile</b></div><div class="bd">${missing.length?missing.map(x=>`<div style="display:flex;gap:8px;padding:6px 0"><span style="color:#d97706">•</span><span>${esc(x)}</span></div>`).join(''):'<div class="sub" style="padding:8px 0">Nothing outstanding — both systems have data for this period. ✓</div>'}
+     <div class="sub" style="font-size:12px;margin-top:8px">As product costs and integrations complete, the automated column becomes the single source of truth and the manual system can be retired.</div>
+   </div></div>`;
 }
 function pnlRow(label,val,strong){const neg=val<0;return `<div class="drow" style="${strong?'font-weight:700;':''}"><span>${esc(label)}</span><b style="color:${neg?'#b56a6a':'#161a26'}">${neg?'−'+money(-val):money(val)}</b></div>`}
 function financeOverview(){

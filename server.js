@@ -37,7 +37,7 @@ function uid(p){ return p+'_'+Date.now().toString(36)+Math.random().toString(36)
 function now(){ return new Date().toISOString(); }
 
 /* ---------- initial data ---------- */
-function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, salesTx:[], salesDaily:{}, salesMeta:{}, fulfillment:[], fulfillmentLocal:{}, version:1 }; }
+function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, salesTx:[], salesDaily:{}, salesMeta:{}, manualFinance:{ sales:[], expenses:[], settings:{ defaultGpPct:28 } }, fulfillment:[], fulfillmentLocal:{}, version:1 }; }
 if (!fs.existsSync(DATA))    writeJSON(DATA, emptyData());
 if (!fs.existsSync(SECRETS)) writeJSON(SECRETS, {
   upcApiKey:'', aiProvider:'anthropic', aiApiKey:'', aiModel:'claude-haiku-4-5',
@@ -2489,7 +2489,8 @@ const server = http.createServer(async (req, res)=>{
                nrsProcessed: data.nrsProcessed||{}, nrsLog: data.nrsLog||[],
                expenses: body.expenses!==undefined?body.expenses:(data.expenses||[]),
                purchaseList: body.purchaseList!==undefined?body.purchaseList:(data.purchaseList||[]),
-               campaigns: body.campaigns!==undefined?body.campaigns:(data.campaigns||[]), version:1 };
+               campaigns: body.campaigns!==undefined?body.campaigns:(data.campaigns||[]),
+               manualFinance: body.manualFinance!==undefined?body.manualFinance:(data.manualFinance||{ sales:[], expenses:[], settings:{ defaultGpPct:28 } }), version:1 };
       saveData();
       return send(res,200,{ok:true});
     }
