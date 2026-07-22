@@ -219,6 +219,10 @@ function overviewData(range){
     const n=e.note||'';if(/clover/i.test(n))chan.Clover+=r;else if(/nrs/i.test(n))chan.NRS+=r;else if(/web/i.test(n))chan.Web+=r;
     if(p){const a=prodAgg[p.id]||(prodAgg[p.id]={p,u:0,r:0});a.u+=u;a.r+=r;}
   });
+  // Sync headline revenue/units/channel to the accurate salesDaily store (matches Clover + the Sales tab).
+  if(hasDaily()){ const rr=rangeYmd(range); const dd=dailyAggClient(rr.from,rr.to);
+    rev=dd.net; units=dd.units; byDay=dd.byDay;
+    chan={NRS:(dd.bySource.nrs||{}).net||0, Clover:(dd.bySource.clover||{}).net||0, Web:(dd.bySource.web||{}).net||0}; }
   const net=rev-cogs;
   const invRetail=S.products.reduce((a,p)=>a+(effPrice(p)||0)*(p.qty||0),0);
   const low=S.products.filter(p=>stockState(p)==='low');const out=S.products.filter(p=>stockState(p)==='out');
@@ -655,11 +659,30 @@ function rangeStart(range){if(range==='today'){const d=new Date();d.setHours(0,0
 function rangeLabel(range){return range==='today'?'today':('last '+range+' days');}
 function salesAgg(range){const start=rangeStart(range);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let rev=0,units=0,tax=0;const chan={},cat={},byDay={},prod={},dow={},hours=Array(24).fill(0);
   (S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<start)return;const u=Math.abs(e.qtyChange);const p=byId[e.productId];const r=(e.rev!=null)?e.rev:u*(p?(effPrice(p)||0):0);rev+=r;units+=u;tax+=(e.tax||0);const n=e.note||'';const ch=/clover/i.test(n)?'Clover':/nrs/i.test(n)?'NRS':/web/i.test(n)?'Website':'Other';chan[ch]=(chan[ch]||0)+r;const c=(p&&p.category)||'Uncategorized';cat[c]=(cat[c]||0)+r;const d=new Date(e.timestamp);byDay[d.toISOString().slice(0,10)]=(byDay[d.toISOString().slice(0,10)]||0)+r;dow[d.getDay()]=(dow[d.getDay()]||0)+r;hours[d.getHours()]+=r;if(p){const a=prod[p.id]||(prod[p.id]={p,u:0,r:0});a.u+=u;a.r+=r;}});
+  // Sync totals to the accurate salesDaily store (Clover-matched). Keep category/product/hour/dow
+  // breakdowns from the event log — those are illustrative detail, not the reconciled headline numbers.
+  if(hasDaily()){ const r=rangeYmd(range); const dd=dailyAggClient(r.from,r.to);
+    rev=dd.net; units=dd.units; tax=dd.tax; byDay=dd.byDay;
+    chan={}; for(const s in dd.bySource){ chan[srcLabel(s)]=dd.bySource[s].net; } }
   return {rev,units,tax,chan,cat,byDay,prod,dow,hours,range,start};}
 function periodSeg(){return `<div class="seg">${[7,30,90].map(d=>`<button class="${salesPeriod===d?'on':''}" onclick="salesPeriod=${d};render()">${d} days</button>`).join('')}</div>`}
 function rangeSeg(cur,setter){const opts=[['today','Today'],[7,'Week'],[30,'Month'],[90,'90 days']];return `<div class="seg">${opts.map(o=>`<button class="${cur===o[0]?'on':''}" onclick="${setter}(${typeof o[0]==='string'?"'"+o[0]+"'":o[0]});render()">${o[1]}</button>`).join('')}</div>`}
 function setSalesRange(r){salesRange=r;}
 function setOverviewRange(r){overviewRange=r;}
+/* ---- Shared accurate aggregator: reads the SAME salesDaily store the Sales tab uses, so Overview,
+        Sales and Finance always agree with Clover. Overrides the legacy event-based totals. ---- */
+function rangeYmd(range){const now=new Date();const to=ymdLocal(now);
+  if(range==='today'){return {from:to,to};}
+  const n=Number(range)||30;const s=new Date(now);s.setDate(s.getDate()-(n-1));return {from:ymdLocal(s),to};}
+function dailyAggClient(from,to){
+  const out={net:0,gross:0,tax:0,units:0,orders:0,bySource:{},byDay:{},has:false};
+  const sd=S.salesDaily||{};
+  for(const k in sd){const d=sd[k];if(!d)continue;if(from&&d.date<from)continue;if(to&&d.date>to)continue;
+    out.has=true; out.net+=d.net||0; out.gross+=d.gross||0; out.tax+=d.tax||0; out.units+=d.units||0; out.orders+=d.orders||0;
+    const s=out.bySource[d.source]||(out.bySource[d.source]={net:0,gross:0,tax:0,units:0});s.net+=d.net||0;s.gross+=d.gross||0;s.tax+=d.tax||0;s.units+=d.units||0;
+    out.byDay[d.date]=(out.byDay[d.date]||0)+(d.net||0);}
+  return out;}
+function hasDaily(){return Object.keys(S.salesDaily||{}).length>0;}
 /* ============================================================
    SALES v2 — Clover / NRS / Overall tabs, source-tagged, date-wise
    ============================================================ */
@@ -819,7 +842,9 @@ function financeOverview(){
   (S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=catById[e.productId];const c=(p&&p.category)||'Uncategorized';const u=Math.abs(e.qtyChange);const r=(e.rev!=null)?e.rev:u*(p?(effPrice(p)||0):0);const co=u*((p&&p.costPrice)||0);const o=cat[c]||(cat[c]={rev:0,cost:0});o.rev+=r;o.cost+=co;});
   const rows=Object.entries(cat).map(([k,v])=>({k,rev:v.rev,cost:v.cost,gp:v.rev-v.cost})).sort((x,y)=>y.rev-x.rev).slice(0,10);
   const invRetail=(S.products||[]).reduce((s,p)=>s+(effPrice(p)||0)*(p.qty||0),0);const invCost=(S.products||[]).reduce((s,p)=>s+(p.costPrice||0)*(p.qty||0),0);
-  const _st=new Date();_st.setHours(0,0,0,0);let revToday=0;(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;if(new Date(e.timestamp)<_st)return;const p=catById[e.productId];revToday+=(e.rev!=null)?e.rev:Math.abs(e.qtyChange)*(p?(effPrice(p)||0):0);});
+  let revToday=0;
+  if(hasDaily()){ const rt=rangeYmd('today'); revToday=dailyAggClient(rt.from,rt.to).net; }
+  else { const _st=new Date();_st.setHours(0,0,0,0);(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;if(new Date(e.timestamp)<_st)return;const p=catById[e.productId];revToday+=(e.rev!=null)?e.rev:Math.abs(e.qtyChange)*(p?(effPrice(p)||0):0);}); }
   const _buys=invPurchases(days);const cashNet=a.rev-(ex.total+_buys);
   const payables=(S.purchaseList||[]).filter(o=>o.status!=='done').reduce((s,o)=>{const p=catById[o.productId];return s+((p&&p.costPrice)||0)*(o.qty||0);},0);
   const topCat=rows[0]?rows[0].k:'—';
