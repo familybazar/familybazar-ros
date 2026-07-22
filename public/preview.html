@@ -212,7 +212,7 @@ async function manualSync(){await load();render();}
 /* ---------- Overview computations ---------- */
 function overviewData(range){
   const start=rangeStart(range);const today=range==='today';const byId={};S.products.forEach(p=>byId[p.id]=p);
-  let rev=0,cogs=0,units=0;const hours=Array(24).fill(0);const byDay={};const prodAgg={};const chan={NRS:0,Clover:0,Web:0};
+  let rev=0,cogs=0,units=0;const hours=Array(24).fill(0);let byDay={};const prodAgg={};let chan={NRS:0,Clover:0,Web:0};
   (S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<start)return;const u=Math.abs(e.qtyChange);const p=byId[e.productId];const r=(e.rev!=null)?e.rev:u*(p?(effPrice(p)||0):0);
     rev+=r;units+=u;if(p)cogs+=u*(p.costPrice||0);
     const dd=new Date(e.timestamp);if(today)hours[dd.getHours()]+=r;else byDay[dd.toISOString().slice(0,10)]=(byDay[dd.toISOString().slice(0,10)]||0)+r;
@@ -657,7 +657,7 @@ function dayBars(byDay,days){if(typeof days==='string')days=presetDays(days);day
 function barList(items,fmt){if(!items.length)return '<div class="sub" style="padding:8px 0">No data in this period.</div>';const max=Math.max(1,...items.map(i=>i.value));return items.map(i=>`<div class="cbar"><span class="nm" style="width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(i.label)}</span><span class="tr"><span class="fl" style="width:${Math.round(i.value/max*100)}%;background:${i.color||'#7d93df'}"></span></span><span class="vl" style="width:78px">${fmt(i.value)}</span></div>`).join('')}
 function rangeStart(range){if(typeof range==='string' && SALES_PRESETS.some(p=>p[0]===range)) return winOf(range).fromMs;if(range==='today'){const d=new Date();d.setHours(0,0,0,0);return d.getTime();}return Date.now()-(range||30)*864e5;}
 function rangeLabel(range){const p=SALES_PRESETS.find(x=>x[0]===range);if(p)return p[1];return range==='today'?'today':('last '+range+' days');}
-function salesAgg(range){const start=rangeStart(range);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let rev=0,units=0,tax=0;const chan={},cat={},byDay={},prod={},dow={},hours=Array(24).fill(0);
+function salesAgg(range){const start=rangeStart(range);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let rev=0,units=0,tax=0;let chan={},byDay={};const cat={},prod={},dow={},hours=Array(24).fill(0);
   (S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<start)return;const u=Math.abs(e.qtyChange);const p=byId[e.productId];const r=(e.rev!=null)?e.rev:u*(p?(effPrice(p)||0):0);rev+=r;units+=u;tax+=(e.tax||0);const n=e.note||'';const ch=/clover/i.test(n)?'Clover':/nrs/i.test(n)?'NRS':/web/i.test(n)?'Website':'Other';chan[ch]=(chan[ch]||0)+r;const c=(p&&p.category)||'Uncategorized';cat[c]=(cat[c]||0)+r;const d=new Date(e.timestamp);byDay[d.toISOString().slice(0,10)]=(byDay[d.toISOString().slice(0,10)]||0)+r;dow[d.getDay()]=(dow[d.getDay()]||0)+r;hours[d.getHours()]+=r;if(p){const a=prod[p.id]||(prod[p.id]={p,u:0,r:0});a.u+=u;a.r+=r;}});
   // Sync totals to the accurate salesDaily store (Clover-matched). Keep category/product/hour/dow
   // breakdowns from the event log — those are illustrative detail, not the reconciled headline numbers.
