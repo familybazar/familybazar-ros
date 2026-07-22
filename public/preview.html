@@ -731,6 +731,7 @@ function salesOverallBody(){
   const netTot=c.net||0;
   return `<div class="kpis">
     ${kpi('Net sales',money2(c.net||0),SALES_PRESETS.find(p=>p[0]===salesRangeKey)[1])}
+    ${kpi('Payments total',money2((c.gross||0)-(c.discounts||0)+(c.tax||0)),'collected incl. tax')}
     ${kpi('Gross sales',money2(c.gross||0))}
     ${kpi('Discounts',money2(c.discounts||0))}
     ${kpi('Tax collected',money2(c.tax||0))}
@@ -761,7 +762,8 @@ function salesCloverBody(){
   const payRows=Object.entries(pay).sort((a,b)=>b[1]-a[1]);
   return `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px"><span class="sub" style="align-self:center">Last sync: ${last}</span><button class="btn sec" onclick="salesSyncClover()">↻ Sync now</button><button class="btn sec" onclick="salesResetClover()">Reset & re-pull</button></div>
    <div class="kpis">
-    ${kpi('Net sales',money2(s.net),'gross − discounts − refunds')}
+    ${kpi('Net sales',money2(s.net),'gross − discounts − refunds · = Clover Home')}
+    ${kpi('Payments total',money2((s.gross||0)-(s.discounts||0)+(s.tax||0)+(s.tip||0)),'collected incl. tax · = Clover Transactions')}
     ${kpi('Gross sales',money2(s.gross))}
     ${kpi('Discounts',money2(s.discounts))}
     ${kpi('Tax collected',money2(s.tax))}
