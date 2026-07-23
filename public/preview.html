@@ -883,7 +883,7 @@ function mfOcc(id,due){const mf=mfEnsure();return (mf.payments||{})[mfOccKey(id,
 function mfOccAmount(item,due){const o=mfOcc(item.id,due);return (o&&o.amount!=null&&o.amount!=='')?Number(o.amount):(Number(item.amount)||0);}
 function mfNextDue(item){const t=mfTodayStr();const ds=mfDueDatesInRange(item,t,mfAddDays(t,800));return ds.length?ds[0]:(item.frequency==='once'?item.startDate:null);}
 function mfOneoff(b){return (((b||{}).oneoff)||[]).reduce((a,o)=>a+mfNum(o.amount),0);}
-function mfRecDueList(book,date){const mf=mfEnsure();return (mf.recurring||[]).filter(it=>it.active!==false && (book==='merged'||it.book===book) && mfDueOnDate(it,date));}
+function mfRecDueList(book,date){const mf=mfEnsure();return (mf.recurring||[]).filter(it=>it.active!==false && !it.paused && (book==='merged'||it.book===book) && mfDueOnDate(it,date));}
 function mfRecExp(book,date){let e=0;mfRecDueList(book,date).forEach(it=>{const o=mfOcc(it.id,date);if(o&&o.status==='skipped')return;e+=mfOccAmount(it,date);});return e;}
 function mfPhoneSales(p){const s=(p||{}).sales||{};return ['phone','accessory','repair','otherSales','service'].reduce((a,k)=>a+mfNum(s[k]),0);}
 function mfDayMetrics(rec,date){ rec=rec||{}; const g=rec.general||{}, p=rec.phone||{};
@@ -902,7 +902,7 @@ function mfCompute(book){
     if(book!=='general'){ const s=mfPhoneSales(p),gp=(p.gpPct!==''&&p.gpPct!=null)?mfNum(p.gpPct):mfDefGp(); salesTot+=s;estGP+=s*gp/100;oneoffExp+=mfOneoff(p); }
   }
   let recExp=0;
-  (mf.recurring||[]).forEach(it=>{ if(it.active===false)return; if(book!=='merged'&&it.book!==book)return;
+  (mf.recurring||[]).forEach(it=>{ if(it.active===false||it.paused)return; if(book!=='merged'&&it.book!==book)return;
     mfDueDatesInRange(it,w.from,w.to).forEach(due=>{ const o=mfOcc(it.id,due); if(o&&o.status==='skipped')return; recExp+=mfOccAmount(it,due); }); });
   const expTot=oneoffExp+recExp, estCOGS=salesTot-estGP, estNet=estGP-expTot;
   return {salesTot,estGP,estCOGS,expTot,estNet,margin:salesTot?estNet/salesTot*100:0,gpPct:salesTot?estGP/salesTot*100:mfDefGp(),count:Object.keys(days).filter(d=>d>=w.from&&d<=w.to).length};
@@ -975,10 +975,15 @@ function mfReminders(){ const t=mfTodayStr(); const mf=mfEnsure(); const over=[]
     mfDueDatesInRange(it,mfAddDays(t,-60),mfAddDays(t,21)).forEach(dd=>{ const o=mfOcc(it.id,dd); if(o&&(o.status==='paid'||o.status==='skipped'))return;
       if(dd<t)over.push({it,dd}); else if(dd===t)due.push({it,dd}); else up.push({it,dd}); }); });
   up.sort((a,b)=>a.dd<b.dd?-1:1); return {over,due,up:up.slice(0,6)}; }
-function mfMarkPaid(id,due){ mfCaptureForm(); const it=(mfEnsure().recurring||[]).find(x=>x.id===id); mfEnsure().payments[mfOccKey(id,due)]={status:'paid',amount:it?mfOccAmount(it,due):0,paidDate:mfTodayStr()}; mfDirty=false; save(); render(); toast('Marked paid'); }
+function mfRecordPay(id,due,actual){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); const prev=mfOcc(id,due)||{};
+  const rec={ status:'paid', expected:it?Number(it.amount)||0:0, amount:actual!=null?(Number(actual)||0):(it?mfOccAmount(it,due):0),
+    dueDate:due, paidDate:mfTodayStr(), source:prev.source||'manual', confirmedBy:(typeof ME!=='undefined'&&ME&&ME.name)||'owner',
+    provider:it?(it.provider||''):'', accountNo:it?(it.accountNo||''):'' };
+  mfEnsure().payments[mfOccKey(id,due)]=Object.assign({},prev,rec); }
+function mfMarkPaid(id,due){ mfCaptureForm(); mfRecordPay(id,due,null); mfDirty=false; save(); render(); toast('Marked paid'); }
 function mfUnpay(id,due){ mfCaptureForm(); delete mfEnsure().payments[mfOccKey(id,due)]; mfDirty=false; save(); render(); }
-function mfSkipOcc(id,due){ mfCaptureForm(); mfEnsure().payments[mfOccKey(id,due)]={status:'skipped'}; mfDirty=false; save(); render(); toast('Skipped'); }
-function mfEditOcc(id,due){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); const cur=it?mfOccAmount(it,due):0; const v=prompt('Amount actually paid for this bill:',cur); if(v===null)return; mfCaptureForm(); mfEnsure().payments[mfOccKey(id,due)]={status:'paid',amount:Number(v)||0,paidDate:mfTodayStr()}; mfDirty=false; save(); render(); }
+function mfSkipOcc(id,due){ mfCaptureForm(); const prev=mfOcc(id,due)||{}; mfEnsure().payments[mfOccKey(id,due)]=Object.assign({},prev,{status:'skipped',dueDate:due,confirmedBy:(typeof ME!=='undefined'&&ME&&ME.name)||'owner'}); mfDirty=false; save(); render(); toast('Skipped'); }
+function mfEditOcc(id,due){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); const cur=it?mfOccAmount(it,due):0; const v=prompt('Amount actually paid for this bill:',cur); if(v===null)return; mfCaptureForm(); mfRecordPay(id,due,v); mfDirty=false; save(); render(); }
 function mfOneRow(book,o,i){ o=o||{}; return `<div style="display:grid;grid-template-columns:1fr 110px auto;gap:8px;align-items:center;margin-bottom:6px">${mfT(book+'.oneoff.'+i+'.name',o.name,'Expense name')}${mfN(book+'.oneoff.'+i+'.amount',o.amount)}<button class="btn sec sm" onclick="mfDelOne('${book}',${i})">✕</button></div>`; }
 function mfAddOne(book){ const rec=mfReadForm(); rec[book].oneoff=rec[book].oneoff||[]; rec[book].oneoff.push({}); mfEnsure().days[mfDate]=rec; mfDirty=true; render(); }
 function mfDelOne(book,i){ const rec=mfReadForm(); (rec[book].oneoff||[]).splice(i,1); mfEnsure().days[mfDate]=rec; mfDirty=true; render(); }
@@ -1069,58 +1074,107 @@ function viewCashEntry(){
    </form>
    <div style="height:24px"></div>`;
 }
-/* ---- Recurring Expenses — always-visible inline form + list ---- */
+/* ============================================================
+   Recurring Expenses — bill calendar + manager. Feeds Cash Entry + Finance.
+   Occurrence records (data.manualFinance.payments) also reserve email-parser fields:
+   source, sourceEmailId, provider, invoiceNo, billingPeriod, detectedAmount, detectedDueDate, confidence, status.
+   ============================================================ */
+const MF_CATS=['Payroll','Rent','Utilities','Insurance','License/Permit','Loan/Debt','Tax','Software','Marketing','Other'];
+const MF_DEFAULTS={ general:[['Employee salary','Payroll','weekly'],['Rent','Rent','monthly'],['Insurance','Insurance','yearly'],['Electricity','Utilities','monthly'],['Phone','Utilities','monthly'],['Wi-Fi','Utilities','monthly'],['Garbage','Utilities','monthly'],['Business tax','Tax','monthly'],['Other expense','Other','monthly']], phone:[['Employee salary','Payroll','biweekly'],['Other recurring expense','Other','monthly']] };
+let recFilter='all', recCalRange='month', recPrefill=null;
+function recLive(it){ return it&&it.active!==false&&!it.paused; }
+function recFreqGroup(f){ return (f==='weekly'||f==='biweekly')?'wk':(f==='monthly'?'mo':(f==='yearly'?'yr':'one')); }
+function recMonthlyEquiv(it){ if(!recLive(it))return 0; const a=Number(it.amount)||0; return it.frequency==='weekly'?a*52/12:it.frequency==='biweekly'?a*26/12:it.frequency==='monthly'?a:0; }
+function recFiltered(){ return (mfEnsure().recurring||[]).filter(it=> recFilter==='all'||it.book===recFilter); }
+function recStatusOf(it){ if(it.paused)return ['','Paused']; const nd=mfNextDue(it); if(!nd)return ['','—']; const o=mfOcc(it.id,nd); if(o&&o.status==='paid')return ['in','Paid']; const t=mfTodayStr(); if(nd<t)return ['out','Overdue']; if(nd===t)return ['low','Due today']; const days=Math.round((new Date(nd+'T12:00')-new Date(t+'T12:00'))/864e5); return days<=(Number(it.reminderDays)||3)?['low','Due soon']:['','Upcoming']; }
+function recLastPaid(it){ const mf=mfEnsure(); let last=null; for(const k in (mf.payments||{})){ if(k.indexOf(it.id+'|')!==0)continue; const o=mf.payments[k]; if(o&&o.status==='paid'&&o.paidDate&&(!last||o.paidDate>last))last=o.paidDate; } return last; }
+function recUpcoming(from,to){ const out=[]; recFiltered().forEach(it=>{ if(!recLive(it))return; mfDueDatesInRange(it,from,to).forEach(dd=>{ const o=mfOcc(it.id,dd); out.push({it,dd,paid:!!(o&&o.status==='paid'),skipped:!!(o&&o.status==='skipped'),amt:mfOccAmount(it,dd)}); }); }); out.sort((a,b)=>a.dd<b.dd?-1:1); return out; }
+function mfRecPause(id){ const it=mfEnsure().recurring.find(x=>x.id===id); if(it){ it.paused=!it.paused; save(); render(); toast(it.paused?'Paused':'Resumed'); } }
+function recAddDefault(bk,nm,cat,fr){ const variable=/electric|phone|tax|gas|water|garbage/i.test(nm); recPrefill={book:bk,name:nm,category:cat,frequency:fr,amount:'',startDate:mfTodayStr(),amountType:variable?'variable':'fixed',reminderDays:3,active:true}; mfRecModal(); }
+function recRow(it){ const sp=recStatusOf(it); const nd=mfNextDue(it); const lp=recLastPaid(it); const paidNow=nd&&mfOcc(it.id,nd)&&mfOcc(it.id,nd).status==='paid';
+  return `<tr><td style="font-weight:600">${esc(it.name)}${it.amountType==='variable'?' <span class="pill" title="amount changes each period">variable</span>':''}</td>
+    <td>${mfBookLabel(it.book)}</td><td class="right">${it.amount?money2(it.amount):'<span class="sub">set at bill</span>'}</td>
+    <td class="sub">${mfFreqLabel(it.frequency)}</td><td>${nd||'—'}</td><td class="sub">${lp||'—'}</td><td><span class="pill ${sp[0]}">${sp[1]}</span></td>
+    <td class="right" style="white-space:nowrap">${(nd&&!paidNow&&!it.paused)?`<button class="btn sec sm" onclick="mfMarkPaid('${it.id}','${nd}')">Paid</button> `:''}<button class="btn sec sm" onclick="mfRecHistory('${it.id}')">History</button> <button class="btn sec sm" onclick="mfRecPause('${it.id}')">${it.paused?'Resume':'Pause'}</button> <button class="btn sec sm" onclick="mfRecModal('${it.id}')">Edit</button></td></tr>`; }
+function recSection(title,fn){ const items=recFiltered().filter(fn).sort((a,b)=>((mfNextDue(a)||'9999')<(mfNextDue(b)||'9999')?-1:1)); if(!items.length)return '';
+  return `<div style="font-weight:800;margin:20px 0 8px">${title} <span class="sub" style="font-weight:400">${items.length}</span></div><div class="card"><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Expense</th><th>Cash</th><th class="right">Amount</th><th>Frequency</th><th>Next due</th><th>Last paid</th><th>Status</th><th></th></tr></thead><tbody>${items.map(recRow).join('')}</tbody></table></div></div></div>`; }
+function recUpcomingCard(){ const t=mfTodayStr(); const now=new Date();
+  const rng=recCalRange==='week'?mfAddDays(t,6):recCalRange==='next30'?mfAddDays(t,29):new Date(now.getFullYear(),now.getMonth()+1,0,12).toISOString().slice(0,10);
+  const list=recUpcoming(t,rng); const byDate={}; list.forEach(x=>{(byDate[x.dd]=byDate[x.dd]||[]).push(x);}); const dates=Object.keys(byDate).sort();
+  const seg=[['week','This week'],['month','This month'],['next30','Next 30 days']];
+  const body=dates.length?dates.map(dd=>`<div style="padding:8px 0;border-top:1px solid var(--line)"><div style="font-weight:700;font-size:13px;color:${dd===t?'#b07508':'#3d4353'}">${new Date(dd+'T12:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}${dd===t?' · today':''}</div>${byDate[dd].map(x=>`<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:4px 0"><span style="font-size:13.5px">${esc(x.it.name)} <span class="sub" style="font-size:11px">${mfBookLabel(x.it.book)}</span></span><b>${money2(x.amt)}</b>${x.paid?'<span class="pill in">Paid</span>':`<button class="btn sec sm" onclick="mfMarkPaid('${x.it.id}','${x.dd}')">Paid</button>`}</div>`).join('')}</div>`).join(''):'<div class="sub" style="padding:12px 0">Nothing scheduled in this range.</div>';
+  return `<div class="card"><div class="hd"><b>📅 Upcoming bills</b><div class="seg">${seg.map(s=>`<button class="${recCalRange===s[0]?'on':''}" onclick="recCalRange='${s[0]}';render()">${s[1]}</button>`).join('')}</div></div><div class="bd">${body}</div></div>`; }
+function recDefaultsCard(){ const mf=mfEnsure(); const have=(nm,bk)=>(mf.recurring||[]).some(x=>x.book===bk&&(x.name||'').toLowerCase()===nm.toLowerCase()); const chips=[];
+  ['general','phone'].forEach(bk=>{ (MF_DEFAULTS[bk]||[]).forEach(([nm,cat,fr])=>{ if(!have(nm,bk)) chips.push(`<button class="chip" onclick="recAddDefault('${bk}','${nm}','${cat}','${fr}')">${nm} <span class="sub">· ${bk==='phone'?'Phone':'General'}</span></button>`); }); });
+  if(!chips.length)return ''; return `<div style="font-weight:800;margin:20px 0 6px">Quick add</div><div class="sub" style="margin-bottom:8px">Common bills — tap to set the amount &amp; date, then activate.</div><div class="chips" style="margin:0">${chips.join('')}</div>`; }
 function viewRecurring(){
-  const mf=mfEnsure(); const items=(mf.recurring||[]).slice().sort((a,b)=>((mfNextDue(a)||'9999')<(mfNextDue(b)||'9999')?-1:1));
-  const it=mfRecEditId?items.find(x=>x.id===mfRecEditId):null;
-  const fs="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;box-sizing:border-box";
-  const lb=(t)=>`<div style="font-size:12px;color:var(--muted);margin:0 0 4px">${t}</div>`;
-  const form=`<div class="card" style="margin-bottom:16px"><div class="bd" style="padding:16px 18px">
-     <div style="font-weight:800;margin-bottom:12px">${it?'✏️ Edit recurring expense':'＋ Add a recurring expense'}</div>
-     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
-       <div style="grid-column:span 2;min-width:200px">${lb('Expense name')}<input id="rcf_name" value="${it?esc(it.name):''}" placeholder="Rent, Employee salary, Wi-Fi…" style="${fs}"></div>
-       <div>${lb('Cash type')}<select id="rcf_book" style="${fs}"><option value="general" ${!it||it.book==='general'?'selected':''}>General Cash</option><option value="phone" ${it&&it.book==='phone'?'selected':''}>Phone Cash</option></select></div>
-       <div>${lb('Amount')}<div style="position:relative"><span style="position:absolute;left:12px;top:11px;color:#9aa1ad;pointer-events:none">$</span><input id="rcf_amt" type="number" step="0.01" value="${it&&it.amount!=null?it.amount:''}" placeholder="0" style="${fs};padding-left:24px;text-align:right"></div></div>
-       <div>${lb('Frequency')}<select id="rcf_freq" style="${fs}">${MF_FREQ.map(f=>`<option value="${f[0]}" ${it?(it.frequency===f[0]?'selected':''):(f[0]==='monthly'?'selected':'')}>${f[1]}</option>`).join('')}</select></div>
-       <div>${lb('Start date')}<input id="rcf_start" type="date" value="${it&&it.startDate?it.startDate:mfTodayStr()}" style="${fs}"></div>
-       <div>${lb('End date (optional)')}<input id="rcf_end" type="date" value="${it&&it.endDate?it.endDate:''}" style="${fs}"></div>
-       <div style="grid-column:1/-1">${lb('Notes (optional)')}<input id="rcf_note" value="${it?esc(it.note||''):''}" placeholder="Landlord, account #, reminder…" style="${fs}"></div>
-     </div>
-     <div style="display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">
-       <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="rcf_active" ${!it||it.active!==false?'checked':''}> Active</label>
-       <button class="btn" style="margin-left:auto" onclick="mfRecInlineSave()">${it?'Update expense':'Add expense'}</button>
-       ${it?`<button class="btn sec" onclick="mfRecEditId=null;render()">Cancel</button>`:''}
-     </div>
-   </div></div>`;
-  const rows=items.length?items.map(x=>{ const nd=mfNextDue(x); const o=nd?mfOcc(x.id,nd):null;
-    const st=o&&o.status==='paid'?'<span class="pill in">Paid</span>':(nd&&nd<mfTodayStr()?'<span class="pill out">Overdue</span>':(nd===mfTodayStr()?'<span class="pill low">Due today</span>':'<span class="pill">Scheduled</span>'));
-    return `<tr${x.id===mfRecEditId?' style="background:#eef2ff"':''}><td style="font-weight:600">${esc(x.name)}${x.active===false?' <span class="pill">Inactive</span>':''}</td><td>${mfBookLabel(x.book)}</td><td class="right">${money2(x.amount)}</td><td>${mfFreqLabel(x.frequency)}</td><td>${nd||'—'}</td><td>${st}</td><td class="right"><button class="btn sec sm" onclick="mfRecEdit('${x.id}')">Edit</button> <button class="btn sec sm" onclick="mfRecDel('${x.id}')">✕</button></td></tr>`;
-  }).join(''):`<tr><td colspan="7" class="sub" style="padding:18px">No recurring expenses yet — add your first one above.</td></tr>`;
-  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Recurring Expenses</h1><button class="btn sec" onclick="go('cashentry')">← Cash Entry</button></div>
-   <div class="sub" style="margin:6px 0 12px">Set these once. ROS shows each on Cash Entry when it's due and tracks payment automatically — you only confirm the amount.</div>
-   ${form}
-   <div class="card"><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Expense</th><th>Cash</th><th class="right">Amount</th><th>Frequency</th><th>Next due</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+  const mf=mfEnsure(); const t=mfTodayStr(); const now=new Date();
+  const mFrom=new Date(now.getFullYear(),now.getMonth(),1,12).toISOString().slice(0,10), mTo=new Date(now.getFullYear(),now.getMonth()+1,0,12).toISOString().slice(0,10);
+  const dueWeek=recUpcoming(t,mfAddDays(t,6)).filter(x=>!x.paid&&!x.skipped).reduce((a,x)=>a+x.amt,0);
+  const dueMonth=recUpcoming(mFrom,mTo).filter(x=>!x.skipped).reduce((a,x)=>a+x.amt,0);
+  const overdue=recUpcoming(mfAddDays(t,-90),mfAddDays(t,-1)).filter(x=>!x.paid&&!x.skipped);
+  const monthlyRun=recFiltered().reduce((a,it)=>a+recMonthlyEquiv(it),0);
+  const annualOnly=recFiltered().filter(it=>recLive(it)&&it.frequency==='yearly').reduce((a,it)=>a+(Number(it.amount)||0),0);
+  const chip=(v,l)=>`<button class="chip ${recFilter===v?'on':''}" onclick="recFilter='${v}';render()">${l}</button>`;
+  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Recurring Expenses</h1><div><button class="btn sec" onclick="go('cashentry')">← Cash Entry</button> <button class="btn" onclick="mfRecModal()">＋ Add recurring</button></div></div>
+   <div class="sub" style="margin:6px 0 10px">Configure each bill once. ROS shows it on Cash Entry when it's due, sends reminders, and keeps a payment history. Nothing is ever auto-marked paid.</div>
+   <div class="chips" style="margin:0 0 12px">${chip('all','All')}${chip('general','General Cash')}${chip('phone','Phone Cash')}</div>
+   <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+     <div class="kpi"><div class="t">Due this week</div><div class="v">${money2(dueWeek)}</div></div>
+     <div class="kpi"><div class="t">Due this month</div><div class="v">${money2(dueMonth)}</div></div>
+     <div class="kpi"><div class="t">Overdue</div><div class="v ${overdue.length?'warn':''}">${overdue.length}</div><div class="s">${overdue.length?money2(overdue.reduce((a,x)=>a+x.amt,0)):'none'}</div></div>
+     <div class="kpi"><div class="t">Monthly recurring</div><div class="v">${money2(monthlyRun)}</div></div>
+     <div class="kpi"><div class="t">Annual (yearly bills)</div><div class="v">${money2(annualOnly)}</div></div>
+   </div>
+   ${recUpcomingCard()}
+   ${recSection('Weekly &amp; Bi-weekly',it=>recFreqGroup(it.frequency)==='wk'&&!it.paused)}
+   ${recSection('Monthly',it=>recFreqGroup(it.frequency)==='mo'&&!it.paused)}
+   ${recSection('Yearly',it=>recFreqGroup(it.frequency)==='yr'&&!it.paused)}
+   ${recSection('One-time / Custom',it=>recFreqGroup(it.frequency)==='one'&&!it.paused)}
+   ${recSection('Paused',it=>!!it.paused)}
+   ${(mf.recurring||[]).length===0?'<div class="card" style="margin-top:16px"><div class="bd sub" style="padding:20px;text-align:center">No recurring expenses yet. Use <b>Quick add</b> below or <b>＋ Add recurring</b>.</div></div>':''}
+   ${recDefaultsCard()}`;
 }
-function mfRecEdit(id){ mfRecEditId=id; render(); window.scrollTo(0,0); }
-function mfRecInlineSave(){ const name=val('rcf_name'); if(!name){toast('Enter an expense name');return}
-  const d={name,book:val('rcf_book'),amount:Number(val('rcf_amt'))||0,frequency:val('rcf_freq'),startDate:val('rcf_start')||mfTodayStr(),endDate:val('rcf_end')||'',note:val('rcf_note')||'',active:chk('rcf_active')};
-  const mf=mfEnsure(); if(mfRecEditId){ const t=mf.recurring.find(x=>x.id===mfRecEditId); if(t)Object.assign(t,d); mfRecEditId=null; } else { mf.recurring.push(Object.assign({id:uid('rc')},d)); }
-  save(); render(); toast('Saved'); }
-function mfRecModal(id){ const mf=mfEnsure(); const it=id?mf.recurring.find(x=>x.id===id):null;
+function mfRecModal(id){ const mf=mfEnsure(); const it=id?mf.recurring.find(x=>x.id===id):(recPrefill||{name:'',category:'',frequency:'monthly',amount:'',startDate:mfTodayStr(),endDate:'',amountType:'fixed',reminderDays:3,book:'general',active:true}); recPrefill=null;
+  const sh=(t)=>`<div style="font-weight:800;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#9aa1ad;margin:12px 0 6px">${t}</div>`;
   document.getElementById('mdl').innerHTML=`<div class="mh"><b>${id?'Edit':'Add'} recurring expense</b><button class="x" onclick="closeModal()">×</button></div>
-   <div class="mb"><div class="fg">
-     <div class="fld full"><label>Expense name</label><input id="rc_name" value="${it?esc(it.name):''}" placeholder="Rent, Employee salary, Wi-Fi…"></div>
-     <div class="fld"><label>Cash type</label><select id="rc_book"><option value="general" ${!it||it.book==='general'?'selected':''}>General Cash</option><option value="phone" ${it&&it.book==='phone'?'selected':''}>Phone Cash</option></select></div>
-     <div class="fld"><label>Amount ($)</label><input id="rc_amt" type="number" step="0.01" value="${it&&it.amount!=null?it.amount:''}"></div>
-     <div class="fld"><label>Frequency</label><select id="rc_freq">${MF_FREQ.map(f=>`<option value="${f[0]}" ${it?(it.frequency===f[0]?'selected':''):(f[0]==='monthly'?'selected':'')}>${f[1]}</option>`).join('')}</select></div>
-     <div class="fld"><label>Start date</label><input id="rc_start" type="date" value="${it&&it.startDate?it.startDate:mfTodayStr()}"></div>
-     <div class="fld"><label>End date (optional)</label><input id="rc_end" type="date" value="${it&&it.endDate?it.endDate:''}"></div>
-     <div class="fld full"><label>Notes (optional)</label><input id="rc_note" value="${it?esc(it.note||''):''}"></div>
-     <div class="fld full"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rc_active" ${!it||it.active!==false?'checked':''} style="width:auto"> Active</label></div>
-   </div></div>
-   <div class="mf">${id?`<button class="btn sec sm" style="margin-right:auto" onclick="mfRecDel('${id}')">Delete</button>`:''}<button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" onclick="mfRecSave('${id||''}')">Save</button></div>`;showModal();}
-function mfRecSave(id){ const name=val('rc_name'); if(!name){toast('Name required');return} const d={name,book:val('rc_book'),amount:Number(val('rc_amt'))||0,frequency:val('rc_freq'),startDate:val('rc_start')||mfTodayStr(),endDate:val('rc_end')||'',note:val('rc_note')||'',active:chk('rc_active')}; const mf=mfEnsure(); if(id){Object.assign(mf.recurring.find(x=>x.id===id),d);}else{mf.recurring.push(Object.assign({id:uid('rc')},d));} save(); closeModal(); render(); toast('Saved'); }
-function mfRecDel(id){ if(!confirm('Delete this recurring expense?'))return; const mf=mfEnsure(); mf.recurring=mf.recurring.filter(x=>x.id!==id); save(); closeModal(); render(); toast('Deleted'); }
+   <div class="mb" style="max-height:74vh;overflow:auto">
+     ${sh('Basic')}
+     <div class="fg">
+       <div class="fld full"><label>Expense name</label><input id="rc_name" value="${esc(it.name||'')}" placeholder="Rent, Employee salary, Wi-Fi…"></div>
+       <div class="fld"><label>Cash type</label><select id="rc_book"><option value="general" ${it.book!=='phone'?'selected':''}>General Cash</option><option value="phone" ${it.book==='phone'?'selected':''}>Phone Cash</option></select></div>
+       <div class="fld"><label>Category</label><select id="rc_cat">${MF_CATS.map(c=>`<option ${it.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+     </div>
+     ${sh('Schedule')}
+     <div class="fg">
+       <div class="fld"><label>Frequency</label><select id="rc_freq">${MF_FREQ.map(f=>`<option value="${f[0]}" ${it.frequency===f[0]?'selected':''}>${f[1]}</option>`).join('')}</select></div>
+       <div class="fld"><label>Start date</label><input id="rc_start" type="date" value="${it.startDate||mfTodayStr()}"></div>
+       <div class="fld"><label>End date (optional)</label><input id="rc_end" type="date" value="${it.endDate||''}"></div>
+     </div>
+     <div class="sub" style="font-size:11.5px;margin-top:4px">Weekly/bi-weekly repeat on the start date's weekday; monthly on its day-of-month; yearly on its month &amp; day.</div>
+     ${sh('Amount')}
+     <div class="fg">
+       <div class="fld"><label>Type</label><select id="rc_amtType"><option value="fixed" ${it.amountType!=='variable'?'selected':''}>Fixed (same each time)</option><option value="variable" ${it.amountType==='variable'?'selected':''}>Variable (changes)</option></select></div>
+       <div class="fld"><label>${it.amountType==='variable'?'Typical amount':'Amount'} ($)</label><input id="rc_amt" type="number" step="0.01" value="${it.amount!=null&&it.amount!==''?it.amount:''}" placeholder="0"></div>
+       <div class="fld"><label>Remind me</label><select id="rc_reminder"><option value="1" ${it.reminderDays==1?'selected':''}>1 day before</option><option value="3" ${!it.reminderDays||it.reminderDays==3?'selected':''}>3 days before</option><option value="7" ${it.reminderDays==7?'selected':''}>7 days before</option></select></div>
+     </div>
+     ${sh('Details')}
+     <div class="fg">
+       <div class="fld"><label>Provider (optional)</label><input id="rc_provider" value="${esc(it.provider||'')}" placeholder="Con Edison, landlord…"></div>
+       <div class="fld"><label>Account # (optional)</label><input id="rc_acct" value="${esc(it.accountNo||'')}"></div>
+       <div class="fld full"><label>Notes (optional)</label><input id="rc_note" value="${esc(it.note||'')}"></div>
+       <div class="fld full"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rc_active" ${it.active!==false?'checked':''} style="width:auto"> Active</label></div>
+     </div>
+   </div>
+   <div class="mf">${id?`<button class="btn sec sm" style="margin-right:auto;color:#b4423a" onclick="mfRecDel('${id}')">Delete</button>`:''}<button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" onclick="mfRecSave('${id||''}')">Save</button></div>`;showModal();}
+function mfRecSave(id){ const name=val('rc_name'); if(!name){toast('Name required');return}
+  const d={name,book:val('rc_book'),category:val('rc_cat'),frequency:val('rc_freq'),startDate:val('rc_start')||mfTodayStr(),endDate:val('rc_end')||'',amountType:val('rc_amtType'),amount:Number(val('rc_amt'))||0,reminderDays:Number(val('rc_reminder'))||3,provider:val('rc_provider')||'',accountNo:val('rc_acct')||'',note:val('rc_note')||'',active:chk('rc_active')};
+  const mf=mfEnsure(); if(id){Object.assign(mf.recurring.find(x=>x.id===id),d);}else{mf.recurring.push(Object.assign({id:uid('rc'),paused:false},d));} save(); closeModal(); render(); toast('Saved'); }
+function mfRecDel(id){ if(!confirm('Delete this recurring expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=mf.recurring.filter(x=>x.id!==id); save(); closeModal(); render(); toast('Deleted'); }
+function mfRecHistory(id){ const mf=mfEnsure(); const it=mf.recurring.find(x=>x.id===id); if(!it){toast('Not found');return}
+  const past=mfDueDatesInRange(it,mfAddDays(mfTodayStr(),-400),mfTodayStr()).reverse();
+  const rows=past.length?past.map(dd=>{ const o=mfOcc(it.id,dd); const st=o?(o.status==='paid'?'<span class="pill in">Paid</span>':'<span class="pill">Skipped</span>'):'<span class="pill out">Unpaid</span>'; return `<tr><td>${dd}</td><td class="right sub">${money2(o&&o.expected!=null?o.expected:it.amount)}</td><td class="right" style="font-weight:600">${o&&o.amount!=null?money2(o.amount):'—'}</td><td class="sub">${o&&o.paidDate?o.paidDate:'—'}</td><td>${st}</td><td class="sub">${o&&o.source?o.source:'—'}</td></tr>`; }).join(''):'<tr><td colspan="6" class="sub" style="padding:14px">No past occurrences.</td></tr>';
+  document.getElementById('mdl').innerHTML=`<div class="mh"><b>${esc(it.name)} — payment history</b><button class="x" onclick="closeModal()">×</button></div><div class="mb" style="max-height:70vh;overflow:auto"><div class="sub" style="margin-bottom:6px">${mfBookLabel(it.book)} · ${mfFreqLabel(it.frequency)} · ${it.amountType==='variable'?'variable':'fixed'} ${money2(it.amount)}</div><table><thead><tr><th>Due</th><th class="right">Expected</th><th class="right">Paid</th><th>Paid on</th><th>Status</th><th>Source</th></tr></thead><tbody>${rows}</tbody></table></div><div class="mf"><button class="btn sec" onclick="closeModal()">Close</button></div>`;showModal(); }
 function mfDefGpModal(){document.getElementById('mdl').innerHTML=`<div class="mh"><b>Default gross-profit %</b><button class="x" onclick="closeModal()">×</button></div>
    <div class="mb"><div class="sub" style="margin-bottom:8px">Used to estimate gross profit &amp; COGS for any sale entered without its own %.</div>
      <input id="mf_defgp" type="number" step="0.1" value="${mfDefGp()}" style="width:120px;padding:9px 12px;border:1px solid var(--line);border-radius:10px"> %
