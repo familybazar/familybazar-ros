@@ -37,7 +37,7 @@ function uid(p){ return p+'_'+Date.now().toString(36)+Math.random().toString(36)
 function now(){ return new Date().toISOString(); }
 
 /* ---------- initial data ---------- */
-function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, salesTx:[], salesDaily:{}, salesMeta:{}, manualFinance:{ sales:[], expenses:[], settings:{ defaultGpPct:28 } }, fulfillment:[], fulfillmentLocal:{}, version:1 }; }
+function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, salesTx:[], salesDaily:{}, salesMeta:{}, manualFinance:{ sales:[], expenses:[], settings:{ defaultGpPct:28 } }, nrsEmails:{}, nrsDaily:{}, nrsItems:[], nrsInventory:{}, nrsAggregate:null, nrsMeta:{}, fulfillment:[], fulfillmentLocal:{}, version:1 }; }
 if (!fs.existsSync(DATA))    writeJSON(DATA, emptyData());
 if (!fs.existsSync(SECRETS)) writeJSON(SECRETS, {
   upcApiKey:'', aiProvider:'anthropic', aiApiKey:'', aiModel:'claude-haiku-4-5',
@@ -217,6 +217,7 @@ function requiredRole(url, method){
   if(method==='POST' && url==='/api/settings') return 'owner';           // API keys / integrations
   if(url.startsWith('/api/users')) return 'owner';                        // team management
   if(url==='/api/data/reset' || url==='/api/nrs/reset') return 'owner';   // destructive
+  if(url==='/api/nrs/backfill') return 'manager';                        // preview-first, but writes on commit
   if(method==='POST' && (url==='/api/marketing/send' || url==='/api/woo/publish' ||
        url==='/api/catalog/publish-all' || url==='/api/invoices/post' || url==='/api/invoices/void' ||
        url==='/api/sales/clover/pull' || url==='/api/clover/rebuild'))
@@ -1409,22 +1410,205 @@ function extractCsvAttachments(raw){
   walk(raw);
   return out.filter(a=>/\.csv$/i.test(a.filename));
 }
-function imapFetchNrs(sinceDays){
+/* ================= NRS Gmail fetch (rebuilt v2) ======================================
+   Reads NRS "Daily Sales Report" emails from Gmail's All Mail, parses the email-body
+   summary (authoritative daily record) plus the Sales History and Inventory Status CSV
+   attachments — all in memory, no local folder. Idempotent by Message-ID. Preview-first:
+   preview mode reports what WOULD import and changes nothing. Read-only mailbox (EXAMINE),
+   never deletes or flags mail. Committing writes ONLY the NRS stores + the shared sales
+   rollup; it does NOT touch products, stock, or the inventory master. */
+const NRS_PARSER_VERSION = 2;
+function nrsNum(v){ if(v==null) return null; const str=String(v).replace(/[^0-9.\-]/g,''); if(str===''||str==='-'||str==='.') return null; const n=Number(str); return isFinite(n)?n:null; }
+// Collect text/plain + text/html bodies from a raw RFC822 message (mirrors the attachment walk).
+function nrsExtractBodies(raw){
+  let text='', html='';
+  function walk(section){
+    const sep=section.indexOf('\r\n\r\n'); if(sep<0) return;
+    const head=section.slice(0,sep); const body=section.slice(sep+4);
+    const ctype=((head.match(/content-type:\s*([^;\r\n]+)/i)||[])[1]||'').trim().toLowerCase();
+    const boundary=(head.match(/boundary="?([^";\r\n]+)"?/i)||[])[1];
+    const enc=((head.match(/content-transfer-encoding:\s*([^\r\n]+)/i)||[])[1]||'').trim().toLowerCase();
+    if(/multipart\//i.test(ctype)&&boundary){
+      for(let p of body.split('--'+boundary)){ p=p.replace(/^\r\n/,'').replace(/\r\n$/,''); if(!p||p==='--') continue; walk(p); }
+      return;
+    }
+    let decoded=body;
+    try{
+      if(enc==='base64') decoded=Buffer.from(body.replace(/\s+/g,''),'base64').toString('utf8');
+      else if(enc==='quoted-printable') decoded=decodeQP(body);
+    }catch(e){}
+    if(/text\/plain/.test(ctype)) text+=decoded+'\n';
+    else if(/text\/html/.test(ctype)) html+=decoded+'\n';
+  }
+  walk(raw);
+  return { text, html };
+}
+function nrsStripHtml(h){
+  return String(h||'')
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi,' ')
+    .replace(/<\/(td|th|tr|table|div|p|li|h[1-6])>/gi,' ')
+    .replace(/<br\s*\/?>/gi,' ')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&#36;/g,'$')
+    .replace(/[ \t]+/g,' ').replace(/\s*\n\s*/g,'\n').trim();
+}
+// Parse the daily summary out of the email body. Best-effort across label variants; records the
+// flattened text (_raw) so the exact labels can be confirmed against the first real email.
+function nrsParseBodySummary(raw){
+  const b=nrsExtractBodies(raw);
+  const flat=(b.text && b.text.replace(/<[^>]+>/g,' ')) || nrsStripHtml(b.html);
+  if(!flat || !/[0-9]/.test(flat)) return null;
+  const one=flat.replace(/\s+/g,' ');
+  const grab=(labels)=>{ for(const L of labels){ const re=new RegExp(L.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[^0-9$()\\-]{0,40}(\\(?\\$?\\s*[0-9][0-9,]*\\.?[0-9]*\\)?)','i'); const m=one.match(re); if(m){ let n=nrsNum(m[1]); if(n!=null && /^\(/.test(m[1].trim())) n=-n; return n; } } return null; };
+  const s={
+    net:      grab(['Net Sales','Net Sale','Net']),
+    tax:      grab(['Sales Tax','Taxes','Tax']),
+    fees:     grab(['Fees','Service Fee','Fee']),
+    total:    grab(['Total Sales','Grand Total','Total Sale','Total']),
+    baskets:  grab(['Number of Baskets','Total Baskets','Baskets','Transactions']),
+    items:    grab(['Items Sold','Total Items','Number of Items','Items']),
+    avgItems: grab(['Average Items per Basket','Avg Items per Basket','Average Items','Avg Items','Items per Basket']),
+    avgSale:  grab(['Average Sale','Avg Sale','Average Basket','Avg Basket','Average Ticket']),
+    discounts:grab(['Discounts','Discount']),
+  };
+  const nn=v=>typeof v==='number';
+  if(!nn(s.total) && nn(s.net)&&nn(s.tax)) s.total=+(s.net+s.tax+(s.fees||0)).toFixed(2);
+  if(!nn(s.net) && nn(s.total)&&nn(s.tax)) s.net=+(s.total-s.tax-(s.fees||0)).toFixed(2);
+  s._raw=one.slice(0,1500);   // kept for tuning against the first real email
+  return s;
+}
+// Sales History CSV -> item detail + department totals. UPC kept as a STRING (leading zeros intact).
+function nrsParseSalesHistory(text){
+  const rows=parseCSVserver(text); const hr=findHeaderRow(rows);
+  if(rows.length<hr+2) return { empty:true };
+  const head=rows[hr].map(h=>cleanCellSrv(h).toLowerCase().replace(/_/g,' '));
+  const col=names=>{ for(const n of names){ const i=head.indexOf(n); if(i>=0) return i; } return -1; };
+  const cU=col(['upc','barcode','upc code','ean','scan code']);
+  const cN=col(['name','item name','description','product','item']);
+  const cQ=col(['total qty','total quantity','qty sold','quantity sold','units sold','quantity','qty','units']);
+  const cA=col(['total amount','amount','total sales','net amount','sales','total']);
+  if(cQ<0 || cU<0) return { badFormat:true };
+  const items=[]; const dept={ taxable:{qty:0,amount:0}, nonTaxable:{qty:0,amount:0} };
+  let totalUnits=0, totalAmount=0;
+  for(let i=hr+1;i<rows.length;i++){ const r=rows[i];
+    const upc=cU>=0?cleanCellSrv(r[cU]):'';               // STRING — no numeric coercion
+    const nm =cN>=0?cleanCellSrv(r[cN]):'';
+    const qty=Math.round(nrsNum(r[cQ])||0);
+    const amt=cA>=0?(nrsNum(r[cA])||0):0;
+    if(!qty && !amt) continue;
+    if(!upc){                                              // department summary row (Taxable / Non-Taxable)
+      if(/non[\s-]*tax/i.test(nm)){ dept.nonTaxable.qty+=qty; dept.nonTaxable.amount+=amt; }
+      else if(/tax/i.test(nm)){ dept.taxable.qty+=qty; dept.taxable.amount+=amt; }
+      continue;
+    }
+    items.push({ upc:String(upc), name:nm, qty, amount:+amt.toFixed(2) });
+    totalUnits+=qty; totalAmount+=amt;
+  }
+  dept.taxable.amount=+dept.taxable.amount.toFixed(2); dept.nonTaxable.amount=+dept.nonTaxable.amount.toFixed(2);
+  return { items, dept, itemCount:items.length, totalUnits, totalAmount:+totalAmount.toFixed(2) };
+}
+// Inventory Status CSV -> stored separately as a dated snapshot (never auto-applied to stock).
+function nrsParseInventory(text){
+  const rows=parseCSVserver(text); const hr=findHeaderRow(rows);
+  if(rows.length<hr+2) return { empty:true };
+  const head=rows[hr].map(h=>cleanCellSrv(h).toLowerCase().replace(/_/g,' '));
+  const col=names=>{ for(const n of names){ const i=head.indexOf(n); if(i>=0) return i; } return -1; };
+  const cU=col(['upc','barcode','upc code','ean','scan code']);
+  const cN=col(['name','item name','description','product','item']);
+  const cD=col(['department','category']);
+  const cS=col(['in stock','on hand','on-hand','onhand','stock','quantity','qty']);
+  const cP=col(['predicted days','days left','predicted']);
+  const cC=col(['count threshold','reorder threshold','reorder point','count']);
+  const cT=col(['days threshold','day threshold']);
+  if(cU<0 || cS<0) return { badFormat:true };
+  const out=[];
+  for(let i=hr+1;i<rows.length;i++){ const r=rows[i];
+    const upc=cU>=0?cleanCellSrv(r[cU]):'';
+    const nm =cN>=0?cleanCellSrv(r[cN]):'';
+    if(!upc && (!nm || !nm.trim())) continue;             // blank / separator (" ") rows
+    out.push({ upc:String(upc), name:nm, department:cD>=0?cleanCellSrv(r[cD]):'',
+      inStock:nrsNum(r[cS]), predictedDays:cP>=0?nrsNum(r[cP]):null,
+      countThreshold:cC>=0?nrsNum(r[cC]):null, daysThreshold:cT>=0?nrsNum(r[cT]):null });
+  }
+  return { rows:out, count:out.length };
+}
+// Business date for a report: subject "…Jul 17, 2026…" > attachment filename > received-minus-1-day.
+function nrsBizDate(subject, attNames, receivedMs){
+  let iso=dateFromName(subject||'');
+  if(!iso){ for(const f of (attNames||[])){ iso=dateFromName(f); if(iso) break; } }
+  if(!iso && receivedMs){ iso=new Date(receivedMs-86400000).toISOString(); }
+  return iso ? iso.slice(0,10) : null;
+}
+function nrsHeaderVal(msg, name){
+  const m=msg.match(new RegExp('^'+name+':\\s*([^\\r\\n]*(?:\\r\\n[ \\t][^\\r\\n]*)*)','im'));
+  return m ? m[1].replace(/\r\n[ \t]+/g,' ').trim() : '';
+}
+// Write one email's parsed content into the durable NRS stores (commit path only).
+function nrsCommit(rec){
+  const key=rec.key;
+  data.nrsEmails[key]={ key, messageId:rec.messageId, uid:rec.uid, from:rec.from, subject:rec.subject,
+    receivedAt:rec.receivedAt, businessDate:rec.businessDate, attachments:rec.attNames,
+    hasBody:!!rec.summary, hasSales:!!rec.sales, hasInventory:!!rec.inventory,
+    parserVersion:NRS_PARSER_VERSION, importedAt:now(), warnings:rec.warnings||[], errors:rec.errors||[] };
+  if(rec.businessDate && rec.summary){
+    const s=rec.summary, sr=rec.sales||{};
+    data.nrsDaily[rec.businessDate]={ date:rec.businessDate, source:'nrs-email', messageId:rec.messageId,
+      receivedAt:rec.receivedAt, importedAt:now(),
+      net:s.net, tax:s.tax, fees:s.fees, total:s.total, baskets:s.baskets, items:s.items,
+      avgItems:s.avgItems, avgSale:s.avgSale, discounts:s.discounts };
+    // Mirror into the shared sales store so existing dashboards read the authoritative body numbers.
+    data.salesDaily['nrs|'+rec.businessDate]={ source:'nrs', date:rec.businessDate,
+      gross:+((s.net!=null?s.net:0)).toFixed(2), net:+((s.net!=null?s.net:0)).toFixed(2),
+      discounts:+((s.discounts!=null?s.discounts:0)).toFixed(2), refunds:0,
+      tax:+((s.tax!=null?s.tax:0)).toFixed(2), tip:0,
+      units:(s.items!=null?s.items:(sr.totalUnits||0)),
+      orders:(s.baskets!=null?s.baskets:0), aov:(s.avgSale!=null?s.avgSale:0),
+      taxable:sr.dept?sr.dept.taxable.amount:0, nonTaxable:sr.dept?sr.dept.nonTaxable.amount:0,
+      total:(s.total!=null?s.total:null), fees:(s.fees!=null?s.fees:0),
+      status:'imported', syncedAt:now(), report:'email' };
+  }
+  if(rec.businessDate && rec.sales && rec.sales.items){
+    data.nrsItems=(data.nrsItems||[]).filter(x=>x.date!==rec.businessDate);   // replace this day's detail
+    for(const it of rec.sales.items) data.nrsItems.push({ date:rec.businessDate, upc:it.upc, name:it.name, qty:it.qty, amount:it.amount });
+  }
+  if(rec.inventory && rec.inventory.rows){
+    const snapDate=rec.businessDate||String(rec.receivedAt||now()).slice(0,10);
+    data.nrsInventory[snapDate]={ date:snapDate, capturedFrom:rec.messageId, importedAt:now(),
+      count:rec.inventory.count, rows:rec.inventory.rows };
+  }
+}
+// Core engine. opts: { from:'YYYY-MM-DD', to:'YYYY-MM-DD', sinceDays, preview, max }
+function nrsGmailRun(opts){
+  opts=opts||{};
   return new Promise((resolve)=>{
     let tls; try{ tls=require('tls'); }catch(e){ return resolve({error:'tls module unavailable'}); }
     const host=(secrets.imapHost||'imap.gmail.com').trim();
     const port=Number(secrets.imapPort)||993;
     const user=(secrets.imapUser||secrets.fromEmail||'').trim();
     const pass=(secrets.imapPass||'').trim();
-    const sender=(secrets.imapSender||'').trim();
+    const sender=(secrets.imapSender||'no-reply@nrsplus.com').trim();
+    const subjectNeedle=(secrets.nrsSubject||'Daily Sales Report').trim();
     if(!user||!pass) return resolve({error:'Add the mailbox email + Gmail app password in Settings.'});
-    const since=new Date(Date.now()-((sinceDays||14)*86400000));
+    const folder=(secrets.imapFolder||'[Gmail]/All Mail');
+    const preview=!!opts.preview;
+    const max=Math.max(1, Math.min(2000, opts.max||1500));
+    let sinceDate;
+    if(opts.from) sinceDate=new Date(opts.from+(/T/.test(opts.from)?'':'T00:00:00'));
+    else sinceDate=new Date(Date.now()-((opts.sinceDays||45)*86400000));
+    if(isNaN(sinceDate.getTime())) sinceDate=new Date(Date.now()-45*86400000);
+    let beforeDate=null;
+    if(opts.to){ beforeDate=new Date(opts.to+'T00:00:00'); beforeDate.setDate(beforeDate.getDate()+1); if(isNaN(beforeDate.getTime())) beforeDate=null; }
+
+    const log={ folder, searched:{ since:imapDateStr(sinceDate), before:beforeDate?imapDateStr(beforeDate):null, sender, subject:subjectNeedle },
+      mode:preview?'preview':'commit', found:0, matched:0, previewed:0, imported:0, skippedDuplicate:0,
+      skippedNonNrs:0, failed:[], samples:[] };
+
     let buf=''; const waiters=[]; let done=false;
     const finish=(v)=>{ if(done)return; done=true; try{sock.end();}catch(e){} resolve(v); };
     const sock=tls.connect({host,port,servername:host});
     sock.setEncoding('binary');
-    sock.setTimeout(60000, ()=>finish({error:'IMAP timed out.'}));
-    sock.on('error', e=>finish({error:'IMAP connection error: '+e.message}));
+    sock.setTimeout(120000, ()=>finish(Object.assign(log,{error:'IMAP timed out.'})));
+    sock.on('error', e=>finish(Object.assign(log,{error:'IMAP connection error: '+e.message})));
     function pump(){ if(!waiters.length)return; const w=waiters[0];
       const re=new RegExp('^'+w.tag+' (OK|NO|BAD)[^\\r\\n]*\\r\\n','m'); const m=re.exec(buf);
       if(m){ const end=m.index+m[0].length; const chunk=buf.slice(0,end); buf=buf.slice(end); waiters.shift(); w.resolve({raw:chunk, ok:m[1]==='OK'}); pump(); } }
@@ -1434,33 +1618,84 @@ function imapFetchNrs(sinceDays){
     async function run(){
       try{
         let r=await cmd('LOGIN "'+user.replace(/(["\\])/g,'\\$1')+'" "'+pass.replace(/(["\\])/g,'\\$1')+'"');
-        if(!r.ok) return finish({error:'Login failed — check the email and Gmail app password.'});
-        await cmd('EXAMINE INBOX');
-        const sr=await cmd('UID SEARCH SINCE '+imapDateStr(since));
-        const line=(sr.raw.match(/\* SEARCH([^\r\n]*)/)||[])[1]||'';
-        const uids=line.trim().split(/\s+/).filter(Boolean);
-        ensureNrsFolder();
-        let scanned=0, saved=0;
-        for(const uid of uids.slice(-300)){
-          const fr=await cmd('UID FETCH '+uid+' (BODY.PEEK[])'); scanned++;
-          const lm=fr.raw.match(/BODY\[\]\s*\{(\d+)\}\r\n/); if(!lm) continue;
-          const start=fr.raw.indexOf(lm[0])+lm[0].length;
-          const msg=fr.raw.substr(start, Number(lm[1]));
-          if(sender){ const fm=(msg.match(/^from:[^\r\n]*/im)||[''])[0].toLowerCase(); if(!fm.includes(sender.toLowerCase())) continue; }
-          for(const a of extractCsvAttachments(msg)){
-            const safe=String(a.filename).replace(/[^\w.\- ]/g,'_');
-            try{ fs.writeFileSync(path.join(nrsFolderPath(), safe), a.buf); saved++; }catch(e){}
-          }
+        if(!r.ok) return finish(Object.assign(log,{error:'Login failed — check the email and Gmail app password.'}));
+        const ex=await cmd('EXAMINE "'+folder.replace(/(["\\])/g,'\\$1')+'"');
+        if(!ex.ok) return finish(Object.assign(log,{error:'Could not open mailbox "'+folder+'". For Gmail use "[Gmail]/All Mail".'}));
+        let crit='SINCE '+imapDateStr(sinceDate);
+        if(beforeDate) crit+=' BEFORE '+imapDateStr(beforeDate);
+        if(sender) crit+=' FROM "'+sender.replace(/(["\\])/g,'\\$1')+'"';
+        const sr=await cmd('UID SEARCH '+crit);
+        const sl=(sr.raw.match(/\* SEARCH([^\r\n]*)/)||[])[1]||'';
+        let uids=sl.trim().split(/\s+/).filter(Boolean).map(Number).filter(n=>n>0);
+        uids.sort((a,b)=>a-b);                     // oldest -> newest (safe resume)
+        log.found=uids.length;
+        if(uids.length>max) uids=uids.slice(-max);
+        for(const uid of uids){
+          let msg='';
+          try{
+            const fr=await cmd('UID FETCH '+uid+' (BODY.PEEK[])');
+            const lm=fr.raw.match(/BODY\[\]\s*\{(\d+)\}\r\n/); if(!lm){ continue; }
+            const start=fr.raw.indexOf(lm[0])+lm[0].length;
+            msg=fr.raw.substr(start, Number(lm[1]));
+          }catch(e){ log.failed.push({ uid, reason:'fetch failed: '+(e&&e.message||e) }); continue; }
+          const from=nrsHeaderVal(msg,'from').toLowerCase();
+          const subject=nrsHeaderVal(msg,'subject');
+          const messageId=(nrsHeaderVal(msg,'message-id')||'').replace(/[<>]/g,'').trim();
+          if(sender && !from.includes(sender.toLowerCase())){ log.skippedNonNrs++; continue; }
+          if(subjectNeedle && !subject.toLowerCase().includes(subjectNeedle.toLowerCase())){ log.skippedNonNrs++; continue; }
+          log.matched++;
+          const key=messageId || ('uid:'+folder+':'+uid);
+          const already=!!(data.nrsEmails[key] && data.nrsEmails[key].parserVersion===NRS_PARSER_VERSION);
+          if(already && !preview){ log.skippedDuplicate++; continue; }
+          try{
+            const dateHdr=nrsHeaderVal(msg,'date');
+            const receivedMs=dateHdr?(Date.parse(dateHdr)||Date.now()):Date.now();
+            const atts=extractCsvAttachments(msg);
+            const attNames=atts.map(a=>a.filename);
+            let sales=null, inventory=null; const warnings=[], errors=[];
+            for(const a of atts){
+              const t=a.buf.toString('utf8');
+              const isInv=/invent|stock|reorder/i.test(a.filename);
+              if(isInv){ const iv=nrsParseInventory(t); if(iv.badFormat||iv.empty) warnings.push('inventory attachment '+a.filename+': '+(iv.badFormat?'unrecognized columns':'empty')); else inventory=iv; }
+              else { const sh=nrsParseSalesHistory(t); if(sh.badFormat||sh.empty) warnings.push('sales attachment '+a.filename+': '+(sh.badFormat?'unrecognized columns':'empty')); else sales=sh; }
+            }
+            const summary=nrsParseBodySummary(msg);
+            if(!summary) warnings.push('no email body summary found');
+            const businessDate=nrsBizDate(subject, attNames, receivedMs);
+            if(!businessDate) warnings.push('could not determine business date');
+            const rec={ key, uid, messageId, from, subject, receivedAt:new Date(receivedMs).toISOString(),
+              businessDate, attNames, summary, sales, inventory, warnings, errors };
+            if(preview){
+              log.previewed++;
+              if(log.samples.length<50) log.samples.push({ businessDate, subject, receivedAt:rec.receivedAt,
+                messageId, alreadyImported:already, hasBody:!!summary,
+                net:summary&&summary.net, tax:summary&&summary.tax, fees:summary&&summary.fees, total:summary&&summary.total,
+                baskets:summary&&summary.baskets, items:summary&&summary.items,
+                salesItems:sales?sales.itemCount:0, salesTotal:sales?sales.totalAmount:null,
+                inventoryRows:inventory?inventory.count:0, attachments:attNames, warnings });
+            } else {
+              nrsCommit(rec);
+              log.imported++;
+            }
+          }catch(e){ log.failed.push({ uid, subject, reason:'parse/commit failed: '+(e&&e.message||e) }); }
         }
         await cmd('LOGOUT');
-        const scan=await nrsScan(true).catch(()=>({}));
-        data.nrsLog = data.nrsLog||[]; data.nrsLog.unshift({ file:'(email fetch)', kind:'email', applied:(scan&&scan.processed)||0, added:saved, at:now() }); if(data.nrsLog.length>50)data.nrsLog=data.nrsLog.slice(0,50); saveData();
-        finish({ scanned, saved, processed:(scan&&scan.processed)||0 });
-      }catch(e){ finish({error:'IMAP error: '+(e&&e.message||e)}); }
+        data.nrsMeta=data.nrsMeta||{};
+        data.nrsMeta.lastRun={ at:now(), mode:log.mode, range:log.searched, found:log.found, matched:log.matched,
+          previewed:log.previewed, imported:log.imported, skippedDuplicate:log.skippedDuplicate, failed:log.failed.length };
+        if(!preview){ data.nrsMeta.lastCommitAt=now();
+          data.nrsLog=data.nrsLog||[]; data.nrsLog.unshift({ file:'(gmail fetch)', kind:'email', applied:log.imported, added:log.imported, skipped:log.skippedDuplicate, at:now() });
+          if(data.nrsLog.length>50) data.nrsLog=data.nrsLog.slice(0,50);
+          saveData();
+        }
+        finish(log);
+      }catch(e){ finish(Object.assign(log,{error:'IMAP error: '+(e&&e.message||e)})); }
     }
   });
 }
-setInterval(()=>{ if(secrets.nrsEmailFetch) imapFetchNrs(14).catch(()=>{}); }, 15*60*1000);
+// Back-compat wrapper: the old name now runs an incremental commit over recent days.
+function imapFetchNrs(sinceDays){ return nrsGmailRun({ sinceDays:sinceDays||45, preview:false }); }
+setInterval(()=>{ if(secrets.nrsEmailFetch) nrsGmailRun({ sinceDays:45, preview:false }).catch(()=>{}); }, 15*60*1000);
 
 /* --- CSV export of products --- */
 function productsCSV(){
@@ -2515,8 +2750,11 @@ const server = http.createServer(async (req, res)=>{
         nrsAutoImport: !!secrets.nrsAutoImport,
         nrsFolder: nrsFolderPath(),
         imapConfigured: !!((secrets.imapUser||secrets.fromEmail||'').trim() && (secrets.imapPass||'').trim()),
-        imapUser: secrets.imapUser||'', imapSender: secrets.imapSender||'',
+        imapUser: secrets.imapUser||'', imapSender: secrets.imapSender||'no-reply@nrsplus.com',
+        imapFolder: secrets.imapFolder||'[Gmail]/All Mail', nrsSubject: secrets.nrsSubject||'Daily Sales Report',
         nrsEmailFetch: !!secrets.nrsEmailFetch,
+        nrsStatus: { emails:Object.keys(data.nrsEmails||{}).length, days:Object.keys(data.nrsDaily||{}).length,
+          latest:Object.keys(data.nrsDaily||{}).sort().slice(-1)[0]||null, lastRun:(data.nrsMeta||{}).lastRun||null },
         nrsLog: (data.nrsLog||[]).slice(0,8),
         smsConfigured: !!((secrets.twilioSid||'').trim() && (secrets.twilioToken||'').trim() && (secrets.twilioFrom||'').trim()),
         emailConfigured: !!((secrets.sendgridKey||'').trim() && (secrets.fromEmail||'').trim()),
@@ -2540,7 +2778,7 @@ const server = http.createServer(async (req, res)=>{
       ['upcApiKey','aiProvider','aiApiKey','aiModel','cloverMerchantId','cloverApiToken','cloverBase',
        'wooUrl','wooKey','wooSecret','wooPublishMode','nrsFolder','platformUrl','platformSecret',
        'twilioSid','twilioToken','twilioFrom','sendgridKey','fromEmail','fromName',
-       'imapHost','imapPort','imapUser','imapPass','imapSender']
+       'imapHost','imapPort','imapUser','imapPass','imapSender','imapFolder','nrsSubject']
         .forEach(k=>{ if (b[k] !== undefined && b[k] !== '') secrets[k] = b[k]; });
       if (typeof b.nrsEmailFetch === 'boolean') secrets.nrsEmailFetch = b.nrsEmailFetch;
       ['loyaltyPerDollar','loyaltyRewardPoints','loyaltyRewardValue']
@@ -2656,15 +2894,57 @@ const server = http.createServer(async (req, res)=>{
       return send(res,200,{ total:rows.length, rows:rows.slice(0,lim) });
     }
     if (url === '/api/nrs/email/fetch' && req.method === 'POST'){
-      const result = await imapFetchNrs(30);
+      const result = await nrsGmailRun({ sinceDays:45, preview:false });
       if(result.error) return send(res,400,result);
       return send(res,200,result);
+    }
+    // Preview-first Gmail backfill. Body: { from, to, sinceDays, commit }. Defaults to PREVIEW (no writes).
+    if (url === '/api/nrs/backfill' && req.method === 'POST'){
+      const b = await readBody(req);
+      const commit = b.commit === true;
+      if (commit){
+        // Snapshot current NRS records before applying, so a bad run can be rolled back.
+        data.nrsMeta = data.nrsMeta || {};
+        data.nrsMeta.backup = { at:now(),
+          nrsEmails: JSON.parse(JSON.stringify(data.nrsEmails||{})),
+          nrsDaily:  JSON.parse(JSON.stringify(data.nrsDaily||{})),
+          salesDailyNrs: Object.fromEntries(Object.entries(data.salesDaily||{}).filter(([k])=>k.startsWith('nrs|'))) };
+      }
+      const result = await nrsGmailRun({ from:b.from, to:b.to, sinceDays:b.sinceDays, max:b.max, preview:!commit });
+      if(result.error) return send(res,400,result);
+      return send(res,200,result);
+    }
+    // NRS coverage + freshness for the dashboard. Read-only.
+    if (url === '/api/nrs/status' && req.method === 'GET'){
+      const daily = data.nrsDaily || {};
+      const dates = Object.keys(daily).sort();
+      const emails = Object.keys(data.nrsEmails||{}).length;
+      const invDates = Object.keys(data.nrsInventory||{}).sort();
+      const itemDays = new Set((data.nrsItems||[]).map(x=>x.date)).size;
+      // gap detection across the covered span
+      const gaps=[]; if(dates.length>1){ const d0=new Date(dates[0]), d1=new Date(dates[dates.length-1]);
+        for(let d=new Date(d0); d<=d1; d.setDate(d.getDate()+1)){ const k=d.toISOString().slice(0,10); if(!daily[k]) gaps.push(k); } }
+      return send(res,200,{ emailsTracked:emails, dailyCount:dates.length,
+        earliest:dates[0]||null, latest:dates[dates.length-1]||null,
+        inventorySnapshots:invDates.length, latestInventory:invDates[invDates.length-1]||null,
+        itemDetailDays:itemDays, missingDays:gaps.slice(0,120), missingCount:gaps.length,
+        lastRun:(data.nrsMeta||{}).lastRun||null, lastCommitAt:(data.nrsMeta||{}).lastCommitAt||null,
+        hasBackup:!!((data.nrsMeta||{}).backup) });
     }
     if (url === '/api/nrs/scan' && req.method === 'POST'){
       const result = await nrsScan(true);
       return send(res,200,result);
     }
     if (url === '/api/nrs/reset' && req.method === 'POST'){
+      const b = await readBody(req).catch(()=>({}));
+      if (b && b.rollback && data.nrsMeta && data.nrsMeta.backup){
+        const bk = data.nrsMeta.backup;
+        data.nrsEmails = bk.nrsEmails || {}; data.nrsDaily = bk.nrsDaily || {};
+        for (const k of Object.keys(data.salesDaily||{})) if (k.startsWith('nrs|')) delete data.salesDaily[k];
+        Object.assign(data.salesDaily, bk.salesDailyNrs || {});
+        saveData();
+        return send(res,200,{ ok:true, rolledBack:true, restoredDays:Object.keys(data.nrsDaily).length });
+      }
       data.nrsProcessed = {}; data.nrsLog = []; saveData();
       return send(res,200,{ ok:true });
     }
