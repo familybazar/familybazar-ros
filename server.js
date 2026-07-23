@@ -1450,6 +1450,34 @@ function nrsExtractBodies(raw){
   walk(raw);
   return { text, html };
 }
+// Instrumented walk for debugging: returns the MIME tree + extracted sizes/samples.
+function nrsProbeBodies(raw){
+  const trace=[]; let text='', html=''; const atts=[];
+  function walk(section, depth){
+    const sep=section.indexOf('\r\n\r\n');
+    if(sep<0){ trace.push('d'+depth+': NO header/body split (len '+section.length+')'); return; }
+    const head=section.slice(0,sep); const body=section.slice(sep+4);
+    const ctype=((head.match(/content-type:\s*([^;\r\n]+)/i)||[])[1]||'').trim().toLowerCase();
+    const boundary=(head.match(/boundary="?([^";\r\n]+)"?/i)||[])[1];
+    const enc=((head.match(/content-transfer-encoding:\s*([^\r\n]+)/i)||[])[1]||'').trim().toLowerCase();
+    const fname=((head.match(/filename\*?="?([^";\r\n]+)"?/i)||head.match(/name="?([^";\r\n]+)"?/i)||[])[1]||'');
+    trace.push('d'+depth+': ctype='+(ctype||'(none)')+' enc='+(enc||'-')+' boundary='+(boundary||'-')+(fname?' file='+fname:'')+' bodyLen='+body.length);
+    if(/multipart\//i.test(ctype)&&boundary){
+      const parts=body.split('--'+boundary);
+      trace.push('   -> '+parts.length+' parts on boundary');
+      for(let p of parts){ p=p.replace(/^\r\n/,'').replace(/\r\n$/,''); if(!p||p==='--') continue; walk(p, depth+1); }
+      return;
+    }
+    let dec=body; try{ if(enc==='base64') dec=Buffer.from(body.replace(/\s+/g,''),'base64').toString('utf8'); else if(enc==='quoted-printable') dec=decodeQP(body);}catch(e){}
+    if(/text\/plain/.test(ctype)) text+=dec;
+    else if(/text\/html/.test(ctype)) html+=dec;
+    if(fname && /\.csv$/i.test(fname)) atts.push(fname);
+  }
+  walk(raw, 0);
+  const flat=(text && text.replace(/<[^>]+>/g,' ')) || nrsStripHtml(html);
+  return { tree:trace, textLen:text.length, htmlLen:html.length, attachments:atts,
+    flatSample:(flat||'').replace(/\s+/g,' ').slice(0,600) };
+}
 function nrsStripHtml(h){
   return String(h||'')
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi,' ')
@@ -1639,7 +1667,8 @@ function nrsGmailRun(opts){
         let uids=sl.trim().split(/\s+/).filter(Boolean).map(Number).filter(n=>n>0);
         uids.sort((a,b)=>a-b);                     // oldest -> newest (safe resume)
         log.found=uids.length;
-        if(uids.length>max) uids=uids.slice(-max);
+        if(opts.probe) uids=uids.slice(-1);        // probe: newest message only (fast)
+        else if(uids.length>max) uids=uids.slice(-max);
         for(const uid of uids){
           let msg='';
           try{
@@ -1654,6 +1683,13 @@ function nrsGmailRun(opts){
           if(sender && !from.includes(sender.toLowerCase())){ log.skippedNonNrs++; continue; }
           if(subjectNeedle && !subject.toLowerCase().includes(subjectNeedle.toLowerCase())){ log.skippedNonNrs++; continue; }
           log.matched++;
+          if(opts.probe){
+            await cmd('LOGOUT');
+            const pr=nrsProbeBodies(msg);
+            return finish({ probe:true, subject, messageId, rawLen:msg.length,
+              headExcerpt:msg.slice(0,500), tree:pr.tree, textLen:pr.textLen, htmlLen:pr.htmlLen,
+              attachments:pr.attachments, flatSample:pr.flatSample });
+          }
           const key=messageId || ('uid:'+folder+':'+uid);
           const already=!!(data.nrsEmails[key] && data.nrsEmails[key].parserVersion===NRS_PARSER_VERSION);
           if(already && !preview){ log.skippedDuplicate++; continue; }
@@ -2962,6 +2998,11 @@ const server = http.createServer(async (req, res)=>{
           attachments:e.attachments, warnings:e.warnings, parserVersion:e.parserVersion }));
       return send(res,200,{ total:Object.keys(data.nrsEmails||{}).length,
         parserVersion:NRS_PARSER_VERSION, sample:rows });
+    }
+    // Debug: fetch ONE matched NRS email live and dump its MIME structure (why body/attachments miss).
+    if (url.split('?')[0] === '/api/nrs/probe' && req.method === 'GET'){
+      const result = await nrsGmailRun({ sinceDays:60, probe:true });
+      return send(res,200,result);
     }
     if (url === '/api/nrs/scan' && req.method === 'POST'){
       const result = await nrsScan(true);
