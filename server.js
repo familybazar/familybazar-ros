@@ -2952,6 +2952,17 @@ const server = http.createServer(async (req, res)=>{
         lastRun:(data.nrsMeta||{}).lastRun||null, lastCommitAt:(data.nrsMeta||{}).lastCommitAt||null,
         hasBackup:!!((data.nrsMeta||{}).backup) });
     }
+    // Debug: inspect what parsing found for the tracked emails (attachments, body, warnings).
+    if (url.split('?')[0] === '/api/nrs/emails' && req.method === 'GET'){
+      const rows = Object.values(data.nrsEmails||{})
+        .sort((a,b)=> String(b.receivedAt||'').localeCompare(String(a.receivedAt||'')))
+        .slice(0,10)
+        .map(e=>({ subject:e.subject, businessDate:e.businessDate, receivedAt:e.receivedAt,
+          hasBody:e.hasBody, hasSales:e.hasSales, hasInventory:e.hasInventory,
+          attachments:e.attachments, warnings:e.warnings, parserVersion:e.parserVersion }));
+      return send(res,200,{ total:Object.keys(data.nrsEmails||{}).length,
+        parserVersion:NRS_PARSER_VERSION, sample:rows });
+    }
     if (url === '/api/nrs/scan' && req.method === 'POST'){
       const result = await nrsScan(true);
       return send(res,200,result);
