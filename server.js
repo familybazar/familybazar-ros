@@ -2963,7 +2963,10 @@ const server = http.createServer(async (req, res)=>{
       return send(res,200,{ total:rows.length, rows:rows.slice(0,lim) });
     }
     if (url === '/api/nrs/email/fetch' && req.method === 'POST'){
-      const result = await nrsGmailRun({ sinceDays:45, preview:false });
+      const b = await readBody(req).catch(()=>({}));
+      // Manual "Fetch now" pulls full history by default (search is filtered to the NRS sender, so it
+      // only returns daily reports). Idempotent: already-imported days are skipped.
+      const result = await nrsGmailRun({ sinceDays:(b&&b.sinceDays)||760, from:b&&b.from, to:b&&b.to, preview:false });
       if(result.error) return send(res,400,result);
       return send(res,200,result);
     }
