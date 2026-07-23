@@ -1044,6 +1044,20 @@ function mfExpSetFreq(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===
 function mfExpRename(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.name=v; save(); }
 function mfExpAdd(book,freq){ recPrefill={book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:'',startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true}; mfRecModal(); }
 function mfExpRemove(id){ if(!confirm('Remove this expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=(mf.recurring||[]).filter(x=>x.id!==id); save(); render(); toast('Removed'); }
+// Prepared common-bill catalog per book+frequency — owner just fills amount/due/paid (no modal).
+const MF_PRESETS={
+  general:{ daily:['Daily supplies','Petty cash'], weekly:['Employee salary','Cleaning'], biweekly:['Payroll'],
+    monthly:['Rent','Electric bill','Phone','Wi-Fi','Garbage','Water','Gas','Insurance','Loan payment','Credit card payment','Business tax'],
+    yearly:['Business license','Permit renewal','Annual insurance','Accountant fee'], once:['Repairs','Equipment','Renovation'] },
+  phone:{ daily:[], weekly:['Employee salary'], biweekly:['Payroll'],
+    monthly:['Booth rent','Phone line','Software subscription','Insurance'], yearly:['License renewal'], once:['Equipment','Repairs'] }
+};
+function mfFindExp(book,name,freq){ return (mfEnsure().recurring||[]).find(x=>x.book===book&&(x.name||'').trim().toLowerCase()===String(name).trim().toLowerCase()&&x.frequency===freq); }
+function mfExpEnsure(book,name,freq){ let it=mfFindExp(book,name,freq); if(!it){ it={id:uid('rc'),book,name,category:'Other',frequency:freq,amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}; mfEnsure().recurring.push(it); } return it; }
+function mfPresetAmt(book,name,freq,v){ const num=Number(v)||0; let it=mfFindExp(book,name,freq); if(!it){ if(!num)return; it=mfExpEnsure(book,name,freq); } it.amount=num; save(); render(); }
+function mfPresetDue(book,name,freq,v){ if(!v)return; const it=mfExpEnsure(book,name,freq); it.startDate=v; save(); render(); }
+function mfExpSetDue(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(it&&v)it.startDate=v; save(); render(); }
+function mfExpAddInline(book,freq){ mfEnsure().recurring.push({id:uid('rc'),book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}); save(); render(); }
 function mfCashCSS(){ return `<style>
   .mf-wrap{--nav:#14213d;--nav2:#1e2f52;--gd:#2f9e6b;--ph:#4f6ef7;--amber:#b07508;--red:#c0483f;--line:#e6e9f0;--mut:#8a93a6}
   .mf-seg{display:inline-flex;background:#eef1f7;border-radius:11px;padding:3px;gap:2px}
@@ -1098,8 +1112,21 @@ function mfCashCSS(){ return `<style>
   .mf-paid,.mf-due{border:0;border-radius:9px;padding:9px 8px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:4px;justify-content:center}
   .mf-paid{background:#e7f6ee;color:#227a4e}.mf-due{background:#fff3e0;color:#a4600a}
   .mf-x{border:0;background:transparent;cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center}
-  .mf-addbtn{border:1px dashed #c9cfdd;background:#fafbfe;color:#4f6ef7;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin-top:2px}
-  @media(max-width:520px){.mf-esttiles{grid-template-columns:1fr 1fr}.mf-exprow{grid-template-columns:1fr 80px 92px;grid-auto-rows:auto}.mf-exprow .mf-paid,.mf-exprow .mf-due{grid-column:1/3}.mf-exprow .mf-x{grid-column:3/4;justify-self:end}}
+  .mf-addbtn{border:1px dashed #c9cfdd;background:#fafbfe;color:#4f6ef7;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin-top:8px}
+  .mf-exphead{display:grid;grid-template-columns:1fr 96px 132px 118px 26px;gap:8px;font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#9aa1ad;font-weight:800;padding:2px 2px 7px}
+  .mf-exprow2{display:grid;grid-template-columns:1fr 96px 132px 118px 26px;gap:8px;align-items:center;margin-bottom:7px}
+  .mf-namewrap{display:flex;align-items:center;gap:6px;min-width:0}
+  .mf-expname.preset{background:#f6f8fc;color:#3d4353;font-weight:600;border-color:#eceff5}
+  .mf-fchip{font-size:9.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:#6b7280;background:#eef1f7;border-radius:20px;padding:2px 7px;white-space:nowrap}
+  .mf-duein{border:1px solid var(--line);border-radius:9px;padding:8px 8px;font-size:12.5px;background:#fff;color:#3d4353;width:100%}
+  .mf-hint{font-size:11px;color:#9aa1ad;text-align:center;align-self:center}
+  @media(max-width:560px){.mf-esttiles{grid-template-columns:1fr 1fr}
+    .mf-exphead{display:none}
+    .mf-exprow2{grid-template-columns:1fr 88px;grid-auto-rows:auto;row-gap:6px;border:1px solid var(--line);border-radius:11px;padding:9px;background:#fcfcfe}
+    .mf-exprow2 .mf-namewrap{grid-column:1/3}
+    .mf-exprow2 .mf-duein{grid-column:1/2}
+    .mf-exprow2 .mf-paid,.mf-exprow2 .mf-due{grid-column:2/3}
+    .mf-exprow2 .mf-x{grid-column:2/3;justify-self:end}}
   </style>`; }
 function viewCashEntry(){
   if(!mfBeforeBound){ window.addEventListener('beforeunload',e=>{ if(mfDirty){e.preventDefault();e.returnValue='';} }); mfBeforeBound=true; }
@@ -1145,20 +1172,37 @@ function viewCashEntry(){
      const tabs=[['all','All'],['daily','Daily'],['weekly','Weekly'],['biweekly','Bi-weekly'],['monthly','Monthly'],['yearly','Yearly'],['once','One-time']];
      const dueCount=f=>items.filter(it=>{ if(f!=='all'&&it.frequency!==f)return false; const nd=mfNextDue(it); if(!nd)return false; const o=mfOcc(it.id,nd); if(o&&(o.status==='paid'||o.status==='skipped'))return false; return nd<=mfTodayStr(); }).length;
      const tabBtns=tabs.map(t=>{ const c=dueCount(t[0]); return `<button class="mf-etab${cur===t[0]?' on':''}" onclick="mfExpTab.${book}='${t[0]}';render()">${t[1]}${c?`<span class="b">${c}</span>`:''}</button>`; }).join('');
-     const shown=cur==='all'?items:items.filter(it=>it.frequency===cur);
-     const rows=shown.length?shown.map(it=>{ const nd=mfNextDue(it); const o=nd?mfOcc(it.id,nd):null; const paid=o&&o.status==='paid';
+     const freqs = cur==='all' ? ['daily','weekly','biweekly','monthly','yearly','once'] : [cur];
+     const rowFor=(it,presetName,freq)=>{
+        const nd=it?mfNextDue(it):null; const o=(it&&nd)?mfOcc(it.id,nd):null; const paid=o&&o.status==='paid';
         const paidTxt=paid&&o.paidDate?(' '+new Date(o.paidDate+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})):'';
-        return `<div class="mf-exprow">
-          <input class="mf-expname" value="${esc(it.name||'')}" placeholder="Expense name" onchange="mfExpRename('${it.id}',this.value)">
-          <div class="mf-inp"><span>$</span><input type="number" inputmode="decimal" step="0.01" value="${it.amount!=null&&it.amount!==''?it.amount:''}" placeholder="${mfPh(it.frequency)}" onchange="mfExpSetAmt('${it.id}',this.value)"></div>
-          <select class="mf-freq" onchange="mfExpSetFreq('${it.id}',this.value)">${MF_FREQ.map(f=>`<option value="${f[0]}"${it.frequency===f[0]?' selected':''}>${f[1]}</option>`).join('')}</select>
-          ${nd?(paid?`<button class="mf-paid" onclick="mfUnpay('${it.id}','${nd}')">${mfIcon('check',12,'#227a4e')}Paid${paidTxt}</button>`:`<button class="mf-due" onclick="mfMarkPaid('${it.id}','${nd}')">Due — mark paid</button>`):`<span class="sub" style="font-size:11px;text-align:center">—</span>`}
-          <button class="mf-x" onclick="mfExpRemove('${it.id}')">${mfIcon('trash',15,'#9aa1ad')}</button>
-        </div>`; }).join(''):`<div class="sub" style="padding:4px 0 8px">No ${cur==='all'?'':mfFreqLabel(cur).toLowerCase()+' '}expenses yet.</div>`;
+        const amtVal=it&&it.amount?it.amount:''; const dueVal=it&&it.startDate?it.startDate:'';
+        const nameCell=it?`<input class="mf-expname" value="${esc(it.name||'')}" placeholder="Expense name" onchange="mfExpRename('${it.id}',this.value)">`:`<div class="mf-expname preset">${esc(presetName)}</div>`;
+        const amtOn=it?`mfExpSetAmt('${it.id}',this.value)`:`mfPresetAmt('${book}',this.dataset.n,'${freq}',this.value)`;
+        const dueOn=it?`mfExpSetDue('${it.id}',this.value)`:`mfPresetDue('${book}',this.dataset.n,'${freq}',this.value)`;
+        const dataN=it?'':` data-n="${esc(presetName)}"`;
+        const paidCell=(it&&nd)?(paid?`<button class="mf-paid" onclick="mfUnpay('${it.id}','${nd}')">${mfIcon('check',12,'#227a4e')}Paid${paidTxt}</button>`:`<button class="mf-due" onclick="mfMarkPaid('${it.id}','${nd}')">Due — mark paid</button>`):`<span class="mf-hint">Enter amount</span>`;
+        const chip=cur==='all'?`<span class="mf-fchip">${mfFreqLabel(freq)}</span>`:'';
+        const del=it?`<button class="mf-x" onclick="mfExpRemove('${it.id}')">${mfIcon('trash',15,'#9aa1ad')}</button>`:`<span></span>`;
+        return `<div class="mf-exprow2">
+           <div class="mf-namewrap">${nameCell}${chip}</div>
+           <div class="mf-inp"><span>$</span><input type="number" inputmode="decimal" step="0.01"${dataN} value="${amtVal}" placeholder="${mfPh(freq)}" onchange="${amtOn}"></div>
+           <input type="date" class="mf-duein"${dataN} value="${dueVal}" onchange="${dueOn}">
+           ${paidCell}${del}
+        </div>`; };
+     let rowsHtml='';
+     freqs.forEach(freq=>{ const existing=items.filter(it=>it.frequency===freq);
+        const used=new Set(existing.map(it=>(it.name||'').trim().toLowerCase()));
+        const presets=((MF_PRESETS[book]||{})[freq]||[]).filter(nm=>!used.has(nm.toLowerCase()));
+        existing.forEach(it=>{ rowsHtml+=rowFor(it,null,freq); });
+        presets.forEach(nm=>{ rowsHtml+=rowFor(null,nm,freq); }); });
+     if(!rowsHtml) rowsHtml=`<div class="sub" style="padding:6px 0">No expenses for this frequency.</div>`;
      return `<div class="mf-sec" style="margin-top:18px"><span>Expenses — enter once</span><span class="amt">${money2(mfExpPeriodTotal(book,period))} / ${per}</span></div>
+       <div class="sub" style="font-size:11.5px;margin:-4px 0 8px">Common bills are listed for you — just fill the amount, due date, and mark paid. Blank ones are ignored.</div>
        <div class="mf-etabs">${tabBtns}</div>
-       ${rows}
-       <button class="mf-addbtn" onclick="mfExpAdd('${book}','${cur}')">${mfIcon('plus',14,'#4f6ef7')} Add expense</button>`; };
+       <div class="mf-exphead"><span>Expense</span><span>Amount</span><span>Due date</span><span>Paid?</span><span></span></div>
+       ${rowsHtml}
+       <button class="mf-addbtn" onclick="mfExpAddInline('${book}','${cur}')">${mfIcon('plus',14,'#4f6ef7')} Add custom expense</button>`; };
   const bookCard=(book)=>{ const c=mfEstCompute(book,period); const isPhone=book==='phone';
      return `<div class="card mf-book"><div class="bd" style="padding:0">
        <div class="mf-bookhd"><span class="mf-bookicon ${book}">${mfIcon(isPhone?'phone':'store',18,isPhone?'#4f6ef7':'#2f9e6b')}</span><span class="mf-booktitle">${isPhone?'Phone Cash':'General Cash'}</span><span class="mf-booktag">${isPhone?'Phones & electronics':'Store'}</span></div>
