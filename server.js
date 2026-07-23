@@ -50,6 +50,13 @@ if (!fs.existsSync(SECRETS)) writeJSON(SECRETS, {
 
 let data    = readJSON(DATA, emptyData());
 let secrets = readJSON(SECRETS, {});
+// Backfill new top-level stores onto an existing data.json (a loaded file doesn't get emptyData()'s keys).
+['nrsEmails','nrsDaily','nrsInventory','nrsMeta','salesDaily','salesMeta'].forEach(k=>{
+  if(!data[k] || typeof data[k]!=='object' || Array.isArray(data[k])) data[k]={};
+});
+if(!Array.isArray(data.nrsItems)) data.nrsItems=[];
+if(!Array.isArray(data.salesTx))  data.salesTx=[];
+if(data.nrsAggregate===undefined) data.nrsAggregate=null;
 
 // --- Secrets from environment (for cloud hosting) --------------------------------------------------
 // So you never have to commit keys. Two ways, applied over whatever is in secrets.json:
@@ -1580,6 +1587,9 @@ function nrsCommit(rec){
 // Core engine. opts: { from:'YYYY-MM-DD', to:'YYYY-MM-DD', sinceDays, preview, max }
 function nrsGmailRun(opts){
   opts=opts||{};
+  data.nrsEmails=data.nrsEmails||{}; data.nrsDaily=data.nrsDaily||{};
+  data.nrsInventory=data.nrsInventory||{}; data.nrsMeta=data.nrsMeta||{};
+  if(!Array.isArray(data.nrsItems)) data.nrsItems=[];
   return new Promise((resolve)=>{
     let tls; try{ tls=require('tls'); }catch(e){ return resolve({error:'tls module unavailable'}); }
     const host=(secrets.imapHost||'imap.gmail.com').trim();
