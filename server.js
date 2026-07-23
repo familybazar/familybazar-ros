@@ -1390,16 +1390,29 @@ function imapDateStr(d){
   return String(d.getDate()).padStart(2,'0')+'-'+mon[d.getMonth()]+'-'+d.getFullYear();
 }
 function decodeQP(s){ return s.replace(/=\r?\n/g,'').replace(/=([0-9A-Fa-f]{2})/g,(_,h)=>String.fromCharCode(parseInt(h,16))); }
+// Parse a MIME part's header block correctly: unfold continuation lines, then read Content-Type,
+// boundary, transfer-encoding, disposition and filename ONLY from their real header lines (anchored to
+// line starts). Without the ^ anchor these fields get matched inside DKIM/ARC signature header lists
+// (h=Content-Type:Content-Transfer-Encoding:...), which breaks multipart detection entirely.
+function mimeHeaders(head){
+  const H = String(head).replace(/\r?\n[ \t]+/g,' ');   // unfold folded headers
+  const ctLine = (H.match(/^content-type:\s*([^\r\n]+)/im)||[])[1] || '';
+  const cdLine = (H.match(/^content-disposition:\s*([^\r\n]+)/im)||[])[1] || '';
+  const ctype   = (ctLine.split(';')[0]||'').trim().toLowerCase();
+  const boundary= (ctLine.match(/boundary="?([^";\r\n]+)"?/i)||[])[1];
+  const enc     = ((H.match(/^content-transfer-encoding:\s*([^\r\n]+)/im)||[])[1]||'').trim().toLowerCase();
+  const disp    = (cdLine.split(';')[0]||'').trim().toLowerCase();
+  const fname   = ((cdLine.match(/filename\*?="?([^";\r\n]+)"?/i)||ctLine.match(/name\*?="?([^";\r\n]+)"?/i)||[])[1]||'').trim();
+  return { ctype, boundary, enc, disp, fname, ctLine };
+}
 function extractCsvAttachments(raw){
   const out=[];
   function walk(section){
     const sep=section.indexOf('\r\n\r\n'); if(sep<0) return;
     const head=section.slice(0,sep); const body=section.slice(sep+4);
-    const ctype=((head.match(/content-type:\s*([^;\r\n]+)/i)||[])[1]||'').trim();
-    const boundary=(head.match(/boundary="?([^";\r\n]+)"?/i)||[])[1];
-    const disp=((head.match(/content-disposition:\s*([^;\r\n]+)/i)||[])[1]||'').trim();
-    const fnameM=head.match(/filename\*?="?([^";\r\n]+)"?/i)||head.match(/name="?([^";\r\n]+)"?/i);
-    const enc=((head.match(/content-transfer-encoding:\s*([^\r\n]+)/i)||[])[1]||'').trim().toLowerCase();
+    const h=mimeHeaders(head);
+    const ctype=h.ctype, boundary=h.boundary, disp=h.disp, enc=h.enc;
+    const fnameM = h.fname ? [null, h.fname] : null;
     if(/multipart\//i.test(ctype)&&boundary){
       for(let p of body.split('--'+boundary)){ p=p.replace(/^\r\n/,'').replace(/\r\n$/,''); if(!p||p==='--') continue; walk(p); }
       return;
@@ -1424,7 +1437,7 @@ function extractCsvAttachments(raw){
    preview mode reports what WOULD import and changes nothing. Read-only mailbox (EXAMINE),
    never deletes or flags mail. Committing writes ONLY the NRS stores + the shared sales
    rollup; it does NOT touch products, stock, or the inventory master. */
-const NRS_PARSER_VERSION = 2;
+const NRS_PARSER_VERSION = 3;   // v3: fixed MIME header parsing (anchored fields, unfold)
 function nrsNum(v){ if(v==null) return null; const str=String(v).replace(/[^0-9.\-]/g,''); if(str===''||str==='-'||str==='.') return null; const n=Number(str); return isFinite(n)?n:null; }
 // Collect text/plain + text/html bodies from a raw RFC822 message (mirrors the attachment walk).
 function nrsExtractBodies(raw){
@@ -1432,9 +1445,7 @@ function nrsExtractBodies(raw){
   function walk(section){
     const sep=section.indexOf('\r\n\r\n'); if(sep<0) return;
     const head=section.slice(0,sep); const body=section.slice(sep+4);
-    const ctype=((head.match(/content-type:\s*([^;\r\n]+)/i)||[])[1]||'').trim().toLowerCase();
-    const boundary=(head.match(/boundary="?([^";\r\n]+)"?/i)||[])[1];
-    const enc=((head.match(/content-transfer-encoding:\s*([^\r\n]+)/i)||[])[1]||'').trim().toLowerCase();
+    const h=mimeHeaders(head); const ctype=h.ctype, boundary=h.boundary, enc=h.enc;
     if(/multipart\//i.test(ctype)&&boundary){
       for(let p of body.split('--'+boundary)){ p=p.replace(/^\r\n/,'').replace(/\r\n$/,''); if(!p||p==='--') continue; walk(p); }
       return;
@@ -1457,10 +1468,7 @@ function nrsProbeBodies(raw){
     const sep=section.indexOf('\r\n\r\n');
     if(sep<0){ trace.push('d'+depth+': NO header/body split (len '+section.length+')'); return; }
     const head=section.slice(0,sep); const body=section.slice(sep+4);
-    const ctype=((head.match(/content-type:\s*([^;\r\n]+)/i)||[])[1]||'').trim().toLowerCase();
-    const boundary=(head.match(/boundary="?([^";\r\n]+)"?/i)||[])[1];
-    const enc=((head.match(/content-transfer-encoding:\s*([^\r\n]+)/i)||[])[1]||'').trim().toLowerCase();
-    const fname=((head.match(/filename\*?="?([^";\r\n]+)"?/i)||head.match(/name="?([^";\r\n]+)"?/i)||[])[1]||'');
+    const h=mimeHeaders(head); const ctype=h.ctype, boundary=h.boundary, enc=h.enc, fname=h.fname;
     trace.push('d'+depth+': ctype='+(ctype||'(none)')+' enc='+(enc||'-')+' boundary='+(boundary||'-')+(fname?' file='+fname:'')+' bodyLen='+body.length);
     if(/multipart\//i.test(ctype)&&boundary){
       const parts=body.split('--'+boundary);
