@@ -177,7 +177,8 @@ const ICONS={
  search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
  receiving:'<path d="M16 16v-2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v2"/><path d="M2 10l2-5h9l2 5"/><circle cx="6" cy="18" r="2"/><path d="M16 8h3l3 4v4h-4"/><circle cx="18" cy="18" r="2"/>',
  fulfillment:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>',
- health:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'
+ health:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+ cash:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>'
 };
 function ic(n,s){s=s||18;return `<svg class="ico" viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]||''}</svg>`}
 function esc(x){return(x==null?'':String(x)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -190,15 +191,15 @@ function stockState(p){if((p.qty||0)<=0)return'out';if((p.qty||0)<=(p.reorderThr
 const NAV=[
  ['overview','Overview','overview'],['products','Products','products'],['catalog','Catalog Health','health'],['inventory','Inventory','inventory'],
  ['receiving','Receiving','receiving'],['fulfillment','Fulfillment','fulfillment'],
- ['sales','Sales','sales'],['finance','Finance','finance'],['customers','Customers','customers'],
+ ['sales','Sales','sales'],['finance','Finance','finance'],['cashentry','Cash Entry','cash'],['customers','Customers','customers'],
  ['operations','Operations','operations'],['channels','Channels','channels'],['marketing','Marketing','megaphone'],['integrations','Integrations','integrations'],
  ['ai','AI Assistant','ai'],['reports','Reports','reports']
 ];
 /* which nav items map to a working screen in the current live app */
-const LIVE={products:1,catalog:1,inventory:1,receiving:1,fulfillment:1,sales:1,customers:1,channels:1,ai:1,integrations:1};
+const LIVE={products:1,catalog:1,inventory:1,receiving:1,fulfillment:1,sales:1,finance:1,cashentry:1,customers:1,channels:1,ai:1,integrations:1};
 
 let detailId=null;
-function go(k){detailId=null;active=k;render();window.scrollTo(0,0)}
+function go(k){ if(active==='cashentry'&&k!=='cashentry'&&typeof mfDirty!=='undefined'&&mfDirty){ if(!confirm('You have unsaved cash entry changes. Leave without saving?'))return; mfDirty=false; } detailId=null;active=k;render();window.scrollTo(0,0)}
 function openDetail(id){detailId=id;render();window.scrollTo(0,0)}
 function closeDetail(){detailId=null;render();window.scrollTo(0,0)}
 function setRole(r){role=r;render()}
@@ -855,19 +856,38 @@ const MF_GROUPS={
   misc:{label:'Miscellaneous',cats:['Repairs','Office Supplies','Equipment','Marketing','Professional Services','Other Expenses']}
 };
 function mfBookLabel(b){return b==='phone'?'Phone Cash':b==='general'?'General Cash':'Merged';}
-function mfEnsure(){ if(!S.manualFinance||typeof S.manualFinance!=='object')S.manualFinance={sales:[],expenses:[],settings:{defaultGpPct:28}}; S.manualFinance.sales=S.manualFinance.sales||[]; S.manualFinance.expenses=S.manualFinance.expenses||[]; S.manualFinance.settings=S.manualFinance.settings||{defaultGpPct:28}; if(S.manualFinance.settings.defaultGpPct==null)S.manualFinance.settings.defaultGpPct=28; return S.manualFinance; }
+function mfEnsure(){ if(!S.manualFinance||typeof S.manualFinance!=='object')S.manualFinance={}; const m=S.manualFinance; m.sales=m.sales||[]; m.expenses=m.expenses||[]; m.days=m.days||{}; m.recurring=m.recurring||{general:{},phone:{}}; m.settings=m.settings||{defaultGpPct:28}; if(m.settings.defaultGpPct==null)m.settings.defaultGpPct=28; return m; }
 function mfDefGp(){return Number(mfEnsure().settings.defaultGpPct)||28;}
 function mfExpAmt(x,w){ if(x.recurring)return (+x.amount||0)*(w.days/30); const t=x.date?new Date(x.date+'T12:00:00').getTime():0; return (t>=w.fromMs&&t<=w.toMs)?(+x.amount||0):0; }
+/* ---- Day-record model: manualFinance.days[YYYY-MM-DD] = {general:{...}, phone:{...}} ---- */
+function mfNum(v){return Number(v)||0;}
+function mfGeneralExp(g){ g=g||{}; let e=0;
+  (g.employees||[]).forEach(em=>{ e+=mfNum(em.salary)+mfNum(em.payrollTax)+mfNum(em.overtime)+mfNum(em.bonus)+mfNum(em.other); });
+  Object.values(g.bills||{}).forEach(b=>{ e+=mfNum(b&&b.amount); });
+  ['rent','insurance','license','equipmentLease','other'].forEach(k=>e+=mfNum((g.fixed||{})[k]));
+  ['salesTax','payrollTax','businessTax','other'].forEach(k=>e+=mfNum((g.taxes||{})[k]));
+  ['loan','creditCard','interest','supplier','other'].forEach(k=>e+=mfNum((g.debts||{})[k]));
+  (g.otherExp||[]).forEach(o=>e+=mfNum(o.amount));
+  return e; }
+function mfPhoneSales(p){const s=(p||{}).sales||{};return ['phone','accessory','repair','activation','other'].reduce((a,k)=>a+mfNum(s[k]),0);}
+function mfPhoneExp(p){const e=(p||{}).exp||{};return ['employee','tech','parts','accessories','supplies','device','activationFees','refunds','warranty','equipment','marketing','other'].reduce((a,k)=>a+mfNum(e[k]),0);}
+function mfDayMetrics(rec){ rec=rec||{}; const g=rec.general||{}, p=rec.phone||{};
+  const gSales=mfNum(g.sales), gGpPct=(g.gpPct!==''&&g.gpPct!=null)?mfNum(g.gpPct):mfDefGp();
+  const gGP=gSales*gGpPct/100, gCOGS=gSales-gGP, gExp=mfGeneralExp(g), gNet=gGP-gExp;
+  const pSales=mfPhoneSales(p), pGpPct=(p.gpPct!==''&&p.gpPct!=null)?mfNum(p.gpPct):mfDefGp();
+  const pGP=pSales*pGpPct/100, pCOGS=pSales-pGP, pExp=mfPhoneExp(p), pNet=pGP-pExp;
+  return { general:{sales:gSales,gp:gGP,cogs:gCOGS,exp:gExp,net:gNet,gpPct:gGpPct,margin:gSales?gNet/gSales*100:0},
+    phone:{sales:pSales,gp:pGP,cogs:pCOGS,exp:pExp,net:pNet,gpPct:pGpPct,margin:pSales?pNet/pSales*100:0},
+    combined:{sales:gSales+pSales,gp:gGP+pGP,cogs:gCOGS+pCOGS,exp:gExp+pExp,net:gNet+pNet} }; }
 function mfCompute(book){
-  const w=winOf(salesRangeKey); const mf=mfEnsure();
-  const sales=mf.sales.filter(s=>(book==='merged'||s.book===book) && s.date>=w.from && s.date<=w.to);
-  const salesTot=sales.reduce((a,s)=>a+(+s.amount||0),0);
-  const estGP=sales.reduce((a,s)=>a+(+s.amount||0)*((s.gpPct!=null&&s.gpPct!==''?+s.gpPct:mfDefGp())/100),0);
-  const estCOGS=salesTot-estGP;
-  let expTot=0; const byGroup={}; const exps=mf.expenses.filter(x=>book==='merged'||x.book===book);
-  exps.forEach(x=>{const amt=mfExpAmt(x,w);if(!amt)return;expTot+=amt;const g=x.group||'misc';byGroup[g]=(byGroup[g]||0)+amt;});
+  const w=winOf(salesRangeKey); const mf=mfEnsure(); const days=mf.days||{};
+  let salesTot=0,estGP=0,estCOGS=0,expTot=0,count=0;
+  for(const d in days){ if(d<w.from||d>w.to)continue; const m=mfDayMetrics(days[d]); count++;
+    if(book!=='phone'){salesTot+=m.general.sales;estGP+=m.general.gp;estCOGS+=m.general.cogs;expTot+=m.general.exp;}
+    if(book!=='general'){salesTot+=m.phone.sales;estGP+=m.phone.gp;estCOGS+=m.phone.cogs;expTot+=m.phone.exp;}
+  }
   const estNet=estGP-expTot;
-  return {salesTot,estGP,estCOGS,expTot,estNet,byGroup,margin:salesTot?estNet/salesTot*100:0,gpPct:salesTot?estGP/salesTot*100:mfDefGp(),count:sales.length};
+  return {salesTot,estGP,estCOGS,expTot,estNet,byGroup:{},margin:salesTot?estNet/salesTot*100:0,gpPct:salesTot?estGP/salesTot*100:mfDefGp(),count};
 }
 function mfSummaryCard(book){const c=mfCompute(book);return `<div class="kpi" style="min-width:200px">
    <div class="t">${mfBookLabel(book)}</div>
@@ -878,37 +898,166 @@ function mfSummaryCard(book){const c=mfCompute(book);return `<div class="kpi" st
      <span class="sub">Est. net profit</span><b style="color:${c.estNet>=0?'#4f8f6a':'#b56a6a'}">${money2(c.estNet)}</b>
    </div></div>`;}
 function viewManualFinance(){
-  const mf=mfEnsure();
-  const books=[['general','General Cash'],['phone','Phone Cash']];
-  const c=mfCompute(mfBook);
-  const w=winOf(salesRangeKey);
-  const sales=mf.sales.filter(s=>s.book===mfBook && s.date>=w.from && s.date<=w.to).sort((a,b)=>a.date<b.date?1:-1);
-  const exps=mf.expenses.filter(x=>x.book===mfBook).map(x=>({x,amt:mfExpAmt(x,w)})).filter(o=>o.amt>0).sort((a,b)=>(b.x.date||'')<(a.x.date||'')?1:-1);
-  const grpRows=Object.keys(MF_GROUPS).map(g=>{const t=c.byGroup[g]||0;return t?`<div style="display:flex;justify-content:space-between;font-size:13px;margin:5px 0"><span>${MF_GROUPS[g].label}</span><b>${money2(t)}</b></div>`:'';}).join('')||'<div class="sub" style="padding:8px 0">No expenses in range.</div>';
-  return `<div class="sub" style="margin:2px 0 10px">Owner-maintained bookkeeping. Enter sales + a projected gross-profit % (COGS is estimated until product costs are complete). Two books kept separate, merged below.</div>
-   <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">${mfSummaryCard('general')}${mfSummaryCard('phone')}${mfSummaryCard('merged')}</div>
-   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin:6px 0 8px">
-     <div class="seg">${books.map(b=>`<button class="${mfBook===b[0]?'on':''}" onclick="mfBook='${b[0]}';render()">${b[1]}</button>`).join('')}</div>
-     <div><button class="btn sec" onclick="mfDefGpModal()">Default GP % (${mfDefGp()}%)</button> <button class="btn sec" onclick="mfSaleModal()">+ Add sale</button> <button class="btn" onclick="mfExpModal()">+ Add expense</button></div>
+  const mf=mfEnsure(); const w=winOf(salesRangeKey);
+  const rows=Object.keys(mf.days||{}).filter(d=>d>=w.from&&d<=w.to).sort().reverse().map(d=>({d,m:mfDayMetrics(mf.days[d])}));
+  const cb=mfCompute('merged');
+  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin:2px 0 10px">
+     <div class="sub">Owner bookkeeping summary for <b>${rangeLabel(salesRangeKey)}</b>. Enter days on the Cash Entry page.</div>
+     <button class="btn" onclick="go('cashentry')">✏️ Open Cash Entry</button>
    </div>
+   <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">${mfSummaryCard('general')}${mfSummaryCard('phone')}${mfSummaryCard('merged')}</div>
    <div class="kpis">
-     <div class="kpi"><div class="t">Sales · ${esc(mfBookLabel(mfBook))}</div><div class="v">${money2(c.salesTot)}</div><div class="s">${rangeLabel(salesRangeKey)}</div></div>
-     <div class="kpi"><div class="t">Est. gross profit</div><div class="v" style="color:#4f8f6a">${money2(c.estGP)}</div><div class="s">${Math.round(c.gpPct)}% GP</div></div>
-     <div class="kpi"><div class="t">Est. COGS</div><div class="v">${money2(c.estCOGS)}</div></div>
-     <div class="kpi"><div class="t">Expenses</div><div class="v">${money2(c.expTot)}</div></div>
-     <div class="kpi"><div class="t">Est. net profit</div><div class="v" style="color:${c.estNet>=0?'#4f8f6a':'#b56a6a'}">${money2(c.estNet)}</div><div class="s">${Math.round(c.margin)}% margin</div></div>
+     <div class="kpi"><div class="t">Total sales</div><div class="v">${money2(cb.salesTot)}</div><div class="s">${rangeLabel(salesRangeKey)}</div></div>
+     <div class="kpi"><div class="t">Est. gross profit</div><div class="v" style="color:#4f8f6a">${money2(cb.estGP)}</div><div class="s">${Math.round(cb.gpPct)}%</div></div>
+     <div class="kpi"><div class="t">Est. COGS</div><div class="v">${money2(cb.estCOGS)}</div></div>
+     <div class="kpi"><div class="t">Total expenses</div><div class="v">${money2(cb.expTot)}</div></div>
+     <div class="kpi"><div class="t">Est. net profit</div><div class="v" style="color:${cb.estNet>=0?'#4f8f6a':'#b56a6a'}">${money2(cb.estNet)}</div><div class="s">${Math.round(cb.margin)}% margin</div></div>
    </div>
-   <div class="grid2">
-     <div class="card"><div class="hd"><b>Sales entries</b><span class="sub">${sales.length}</span></div><div class="bd" style="padding:2px 14px"><div style="overflow:auto;max-height:340px"><table><thead><tr><th>Date</th><th>Channel</th><th class="right">Amount</th><th class="right">GP%</th><th></th></tr></thead><tbody>
-       ${sales.length?sales.map(s=>`<tr><td style="font-weight:600">${esc(s.date)}</td><td class="sub">${esc(s.channel||'—')}</td><td class="right">${money2(s.amount)}</td><td class="right sub">${s.gpPct!=null&&s.gpPct!==''?s.gpPct+'%':mfDefGp()+'%'}</td><td class="right"><button class="btn sec sm" onclick="mfSaleModal('${s.id}')">Edit</button></td></tr>`).join(''):`<tr><td colspan="5" class="sub" style="padding:18px">No sales entered for ${esc(mfBookLabel(mfBook))} in this range.</td></tr>`}
-     </tbody></table></div></div></div>
-     <div class="card"><div class="hd"><b>Expenses by group</b></div><div class="bd">${grpRows}
-       <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:700"><span>Total</span><b>${money2(c.expTot)}</b></div></div></div>
-   </div>
-   <div class="card" style="margin-top:16px"><div class="hd"><b>Expense entries · ${esc(mfBookLabel(mfBook))}</b></div><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Group</th><th>Category</th><th>Frequency</th><th class="right">Amount</th><th></th></tr></thead><tbody>
-     ${exps.length?exps.map(o=>`<tr><td style="font-weight:600">${esc(o.x.date||'—')}</td><td class="sub">${esc((MF_GROUPS[o.x.group]||{}).label||o.x.group||'—')}</td><td>${esc(o.x.category||'—')}</td><td class="sub">${o.x.recurring?'Monthly':'One-time'}</td><td class="right" style="font-weight:600">${money2(o.amt)}</td><td class="right"><button class="btn sec sm" onclick="mfExpModal('${o.x.id}')">Edit</button></td></tr>`).join(''):`<tr><td colspan="6" class="sub" style="padding:18px">No expenses. Add payroll, rent, utilities, taxes, loans…</td></tr>`}
+   <div class="card"><div class="hd"><b>Daily entries</b><span class="sub">${rows.length} day(s)</span></div><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Day</th><th class="right">General net</th><th class="right">Phone net</th><th class="right">Sales</th><th class="right">Net profit</th><th></th></tr></thead><tbody>
+     ${rows.length?rows.map(r=>`<tr><td style="font-weight:600">${r.d}</td><td class="sub">${dowShort(r.d)}</td><td class="right">${money2(r.m.general.net)}</td><td class="right">${money2(r.m.phone.net)}</td><td class="right">${money2(r.m.combined.sales)}</td><td class="right" style="font-weight:700;color:${r.m.combined.net>=0?'#4f8f6a':'#b56a6a'}">${money2(r.m.combined.net)}</td><td class="right"><button class="btn sec sm" onclick="mfEditDay('${r.d}')">Edit</button></td></tr>`).join(''):`<tr><td colspan="7" class="sub" style="padding:18px">No days entered in this range. Tap "Open Cash Entry" to add today.</td></tr>`}
    </tbody></table></div></div></div>`;
 }
+function mfEditDay(d){ mfDate=d; mfDirty=false; go('cashentry'); }
+
+/* ============================================================
+   CASH ENTRY — fast daily worksheet. Two columns (General + Phone), inline fields,
+   live math without full re-render (summaries updated in place). Mobile-first.
+   ============================================================ */
+let mfDate=(new Date()).toISOString().slice(0,10), mfDirty=false, mfBeforeBound=false;
+function mfShiftDate(days){ const d=new Date(mfDate+'T12:00:00'); d.setDate(d.getDate()+days); mfNavDate(d.toISOString().slice(0,10)); }
+function mfNavDate(dstr){ if(mfDirty && !confirm('You have unsaved changes for '+mfDate+'. Leave without saving?'))return; mfDirty=false; mfDate=dstr; render(); }
+function mfN(path,val,ph){ return `<input type="number" inputmode="decimal" step="0.01" data-mf="${path}" value="${val!=null&&val!==''?val:''}" placeholder="${ph||'0'}" oninput="mfTouch()" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:16px;text-align:right;background:#fff">`; }
+function mfT(path,val,ph){ return `<input type="text" data-mf="${path}" value="${val!=null?esc(String(val)):''}" placeholder="${ph||''}" oninput="mfTouch()" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:15px;background:#fff">`; }
+function mfLbl(t){ return `<div style="font-size:12px;color:var(--muted);margin:0 0 3px">${t}</div>`; }
+function mfField(label,inp){ return `<div style="margin-bottom:8px">${mfLbl(label)}${inp}</div>`; }
+function mfAmtRow(label,path,val){ return `<div style="display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;margin-bottom:6px"><span style="font-size:14px">${label}</span>${mfN(path,val)}</div>`; }
+function mfReadForm(){ const rec={general:{},phone:{}};
+  document.querySelectorAll('#cashform [data-mf]').forEach(el=>{ const parts=el.dataset.mf.split('.'); let o=rec;
+    for(let i=0;i<parts.length-1;i++){ const k=parts[i],nk=parts[i+1]; if(o[k]==null)o[k]=(/^\d+$/.test(nk))?[]:{}; o=o[k]; }
+    const last=parts[parts.length-1]; let v; if(el.type==='checkbox')v=el.checked; else if(el.type==='number')v=el.value===''?'':Number(el.value); else v=el.value; o[last]=v; });
+  return rec; }
+function mfTouch(){ mfDirty=true; const s=document.getElementById('mfStatus'); if(s){s.textContent='Unsaved changes';s.style.color='#b07508';} mfRecalc(); }
+function mfSet(id,v){ const el=document.getElementById(id); if(el)el.textContent=v; }
+function mfRecalc(){ const m=mfDayMetrics(mfReadForm());
+  ['general','phone','combined'].forEach(bk=>{ const x=m[bk];
+    mfSet('sum_'+bk+'_sales',money2(x.sales)); mfSet('sum_'+bk+'_gp',money2(x.gp)); mfSet('sum_'+bk+'_cogs',money2(x.cogs)); mfSet('sum_'+bk+'_exp',money2(x.exp)); mfSet('sum_'+bk+'_net',money2(x.net));
+    mfSet('sum_'+bk+'_margin',(x.sales?Math.round(x.net/x.sales*100):0)+'% margin');
+  });
+}
+function mfSaveDay(){ const rec=mfReadForm(); rec.updatedAt=new Date().toISOString(); const mf=mfEnsure(); mf.days[mfDate]=rec; save(); mfDirty=false;
+  const s=document.getElementById('mfStatus'); if(s){s.textContent='Saved · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});s.style.color='#4f8f6a';} toast('Saved '+mfDate); }
+function mfAddEmp(){ const rec=mfReadForm(); rec.general.employees=rec.general.employees||[]; rec.general.employees.push({}); mfEnsure().days[mfDate]=Object.assign({},rec); mfDirty=true; render(); }
+function mfDelEmp(i){ const rec=mfReadForm(); (rec.general.employees||[]).splice(i,1); mfEnsure().days[mfDate]=Object.assign({},rec); mfDirty=true; render(); }
+function mfAddOther(book){ const rec=mfReadForm(); const key=book==='general'?'otherExp':'otherExp'; rec[book][key]=rec[book][key]||[]; rec[book][key].push({}); mfEnsure().days[mfDate]=Object.assign({},rec); mfDirty=true; render(); }
+const MF_BILLS=[['electricity','Electricity'],['gas','Gas'],['water','Water'],['wifi','Wi-Fi'],['phone','Phone'],['garbage','Garbage'],['cleaning','Cleaning'],['security','Security'],['other','Other bill']];
+function viewCashEntry(){
+  if(!mfBeforeBound){ window.addEventListener('beforeunload',e=>{ if(mfDirty){e.preventDefault();e.returnValue='';} }); mfBeforeBound=true; }
+  const mf=mfEnsure(); const rec=mf.days[mfDate]||{general:{},phone:{}}; const g=rec.general||{}, p=rec.phone||{};
+  const emps=g.employees||[]; const gOther=g.otherExp||[]; const savedAt=rec.updatedAt?('Saved · '+new Date(rec.updatedAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})):'Not saved yet';
+  const bills=g.bills||{}; const fx=g.fixed||{}; const tx=g.taxes||{}; const db=g.debts||{}; const ps=p.sales||{}; const pe=p.exp||{};
+  const sec=(t)=>`<div style="font-weight:700;font-size:13px;margin:14px 0 6px;color:#3d4353">${t}</div>`;
+  const liveBox=(bk,title)=>`<div class="card" style="margin-bottom:12px;border:1.5px solid #dfe6f5"><div class="bd" style="padding:12px 14px">
+     <div style="font-weight:800;margin-bottom:6px">${title}</div>
+     <div style="display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:13px">
+       <span class="sub">Sales</span><b id="sum_${bk}_sales">$0</b>
+       <span class="sub">Est. gross profit</span><b id="sum_${bk}_gp" style="color:#4f8f6a">$0</b>
+       <span class="sub">Est. COGS</span><b id="sum_${bk}_cogs">$0</b>
+       <span class="sub">Expenses</span><b id="sum_${bk}_exp">$0</b>
+       <span class="sub">Est. net profit</span><b id="sum_${bk}_net" style="color:#14213d">$0</b>
+     </div><div class="sub" id="sum_${bk}_margin" style="margin-top:4px">0% margin</div>
+   </div></div>`;
+  // GENERAL column
+  const genCol=`<div class="card"><div class="bd" style="padding:14px 16px">
+     <div style="font-weight:800;font-size:16px;margin-bottom:8px">💵 General Cash</div>
+     ${liveBox('general','General summary')}
+     ${sec('Sales &amp; profit')}
+     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+       ${mfField('Sales amount',mfN('general.sales',g.sales))}
+       ${mfField('Profit %',mfN('general.gpPct',g.gpPct,String(mfDefGp())))}
+     </div>
+     ${sec('Employees')}
+     <div id="mfEmps">${emps.length?emps.map((em,i)=>mfEmpRow(em,i)).join(''):'<div class="sub" style="margin-bottom:6px">No employees added.</div>'}</div>
+     <button class="btn sec sm" onclick="mfAddEmp()">＋ Add employee</button>
+     ${sec('Monthly bills')}
+     ${MF_BILLS.map(([k,l])=>`<div style="display:grid;grid-template-columns:1fr 120px auto;gap:8px;align-items:center;margin-bottom:6px"><span style="font-size:14px">${l}</span>${mfN('general.bills.'+k+'.amount',(bills[k]||{}).amount)}<label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" data-mf="general.bills.${k}.paid" ${(bills[k]||{}).paid?'checked':''} onchange="mfTouch()"> Paid</label></div>`).join('')}
+     ${sec('Fixed &amp; periodic')}
+     ${mfAmtRow('Rent (monthly)','general.fixed.rent',fx.rent)}
+     ${mfAmtRow('Insurance','general.fixed.insurance',fx.insurance)}
+     ${mfAmtRow('License / permit','general.fixed.license',fx.license)}
+     ${mfAmtRow('Equipment lease','general.fixed.equipmentLease',fx.equipmentLease)}
+     ${mfAmtRow('Other fixed','general.fixed.other',fx.other)}
+     ${sec('Taxes (paid)')}
+     ${mfAmtRow('Sales tax payment','general.taxes.salesTax',tx.salesTax)}
+     ${mfAmtRow('Payroll tax','general.taxes.payrollTax',tx.payrollTax)}
+     ${mfAmtRow('Business tax','general.taxes.businessTax',tx.businessTax)}
+     ${mfAmtRow('Other tax','general.taxes.other',tx.other)}
+     ${sec('Debts &amp; financing')}
+     ${mfAmtRow('Loan payment','general.debts.loan',db.loan)}
+     ${mfAmtRow('Credit-card payment','general.debts.creditCard',db.creditCard)}
+     ${mfAmtRow('Interest','general.debts.interest',db.interest)}
+     ${mfAmtRow('Supplier debt','general.debts.supplier',db.supplier)}
+     ${mfAmtRow('Other debt','general.debts.other',db.other)}
+     ${sec('Other expenses')}
+     <div id="mfGenOther">${gOther.length?gOther.map((o,i)=>mfOtherRow('general',o,i)).join(''):'<div class="sub" style="margin-bottom:6px">None.</div>'}</div>
+     <button class="btn sec sm" onclick="mfAddOther('general')">＋ Add expense</button>
+   </div></div>`;
+  // PHONE column
+  const phoneCol=`<div class="card"><div class="bd" style="padding:14px 16px">
+     <div style="font-weight:800;font-size:16px;margin-bottom:8px">📱 Phone Cash</div>
+     ${liveBox('phone','Phone summary')}
+     ${sec('Sales')}
+     ${mfAmtRow('Phone sales','phone.sales.phone',ps.phone)}
+     ${mfAmtRow('Accessory sales','phone.sales.accessory',ps.accessory)}
+     ${mfAmtRow('Repair income','phone.sales.repair',ps.repair)}
+     ${mfAmtRow('Activation / service','phone.sales.activation',ps.activation)}
+     ${mfAmtRow('Other sales','phone.sales.other',ps.other)}
+     ${mfField('Profit % (phone)',mfN('phone.gpPct',p.gpPct,String(mfDefGp())))}
+     ${sec('Expenses')}
+     ${mfAmtRow('Employee cost','phone.exp.employee',pe.employee)}
+     ${mfAmtRow('Repair technician','phone.exp.tech',pe.tech)}
+     ${mfAmtRow('Phone-parts purchase','phone.exp.parts',pe.parts)}
+     ${mfAmtRow('Accessories purchase','phone.exp.accessories',pe.accessories)}
+     ${mfAmtRow('Repair supplies','phone.exp.supplies',pe.supplies)}
+     ${mfAmtRow('Device purchase','phone.exp.device',pe.device)}
+     ${mfAmtRow('Activation / service fees','phone.exp.activationFees',pe.activationFees)}
+     ${mfAmtRow('Refunds','phone.exp.refunds',pe.refunds)}
+     ${mfAmtRow('Warranty cost','phone.exp.warranty',pe.warranty)}
+     ${mfAmtRow('Equipment','phone.exp.equipment',pe.equipment)}
+     ${mfAmtRow('Marketing','phone.exp.marketing',pe.marketing)}
+     ${mfAmtRow('Other expense','phone.exp.other',pe.other)}
+   </div></div>`;
+  return `<div style="position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:8px">
+     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+       <h1 class="hello" style="margin:0">Cash Entry</h1>
+       <button class="btn" onclick="mfSaveDay()" style="min-width:120px">💾 Save</button>
+     </div>
+     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
+       <button class="btn sec sm" onclick="mfShiftDate(-1)">‹ Prev</button>
+       <input type="date" value="${mfDate}" onchange="mfNavDate(this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-size:15px">
+       <button class="btn sec sm" onclick="mfNavDate(new Date().toISOString().slice(0,10))">Today</button>
+       <span id="mfStatus" class="sub" style="margin-left:auto;color:#4f8f6a">${esc(savedAt)}</span>
+     </div>
+   </div>
+   <form id="cashform" onsubmit="return false" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:12px">
+     ${genCol}${phoneCol}
+   </form>
+   ${liveBox('combined','Combined business estimate')}
+   <div style="height:24px"></div>`;
+}
+function mfEmpRow(em,i){ em=em||{}; return `<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px">
+   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:13px">Employee ${i+1}</b><button class="btn sec sm" onclick="mfDelEmp(${i})">Remove</button></div>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+     ${mfField('Name',mfT('general.employees.'+i+'.name',em.name))}
+     <div style="margin-bottom:8px">${mfLbl('Pay frequency')}<select data-mf="general.employees.${i}.freq" onchange="mfTouch()" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:15px;background:#fff"><option value="weekly" ${em.freq==='weekly'?'selected':''}>Weekly</option><option value="biweekly" ${em.freq==='biweekly'?'selected':''}>Bi-weekly</option></select></div>
+     ${mfField('Salary',mfN('general.employees.'+i+'.salary',em.salary))}
+     ${mfField('Payroll tax',mfN('general.employees.'+i+'.payrollTax',em.payrollTax))}
+     ${mfField('Overtime',mfN('general.employees.'+i+'.overtime',em.overtime))}
+     ${mfField('Bonus',mfN('general.employees.'+i+'.bonus',em.bonus))}
+     ${mfField('Other cost',mfN('general.employees.'+i+'.other',em.other))}
+   </div></div>`; }
+function mfOtherRow(book,o,i){ o=o||{}; return `<div style="display:grid;grid-template-columns:1fr 110px auto;gap:8px;align-items:center;margin-bottom:6px">
+   ${mfT(book+'.otherExp.'+i+'.type',o.type,'Expense type')}${mfN(book+'.otherExp.'+i+'.amount',o.amount)}<button class="btn sec sm" onclick="mfDelOther('${book}',${i})">✕</button></div>`; }
+function mfDelOther(book,i){ const rec=mfReadForm(); (rec[book].otherExp||[]).splice(i,1); mfEnsure().days[mfDate]=Object.assign({},rec); mfDirty=true; render(); }
 function mfDefGpModal(){document.getElementById('mdl').innerHTML=`<div class="mh"><b>Default gross-profit %</b><button class="x" onclick="closeModal()">×</button></div>
    <div class="mb"><div class="sub" style="margin-bottom:8px">Used to estimate gross profit &amp; COGS for any sale entered without its own %.</div>
      <input id="mf_defgp" type="number" step="0.1" value="${mfDefGp()}" style="width:120px;padding:9px 12px;border:1px solid var(--line);border-radius:10px"> %
@@ -1837,9 +1986,10 @@ function render(){
          <button class="${role==='employee'?'on':''}" onclick="setRole('employee')">Employee</button>
        </div>`:''}
      </div>
-     <div class="content">${detailId?viewProductDetail(detailId):active==='overview'?viewOverview():active==='products'?viewProducts():active==='catalog'?viewCatalog():active==='inventory'?viewInventory():active==='receiving'?viewReceiving():active==='fulfillment'?viewFulfillment():active==='sales'?viewSales():active==='finance'?viewFinance():active==='customers'?viewCustomers():active==='operations'?viewOperations():active==='channels'?viewChannels():active==='marketing'?viewMarketing():active==='integrations'?viewIntegrations():active==='reports'?viewReports():active==='ai'?viewAI():viewPlaceholder(active,(NAV.find(n=>n[0]===active)||[,'Screen'])[1])}</div>
+     <div class="content">${detailId?viewProductDetail(detailId):active==='overview'?viewOverview():active==='products'?viewProducts():active==='catalog'?viewCatalog():active==='inventory'?viewInventory():active==='receiving'?viewReceiving():active==='fulfillment'?viewFulfillment():active==='sales'?viewSales():active==='finance'?viewFinance():active==='cashentry'?viewCashEntry():active==='customers'?viewCustomers():active==='operations'?viewOperations():active==='channels'?viewChannels():active==='marketing'?viewMarketing():active==='integrations'?viewIntegrations():active==='reports'?viewReports():active==='ai'?viewAI():viewPlaceholder(active,(NAV.find(n=>n[0]===active)||[,'Screen'])[1])}</div>
    </div>`;
   if(_afId){const el=document.getElementById(_afId);if(el&&typeof el.focus==='function'){try{el.focus();if(_afPos!=null&&el.setSelectionRange)el.setSelectionRange(_afPos,_afPos);}catch(e){}}}
+  if(active==='cashentry'){ try{ mfRecalc(); }catch(e){} }   // populate live summaries after the DOM is built
 }
 
 (async()=>{
