@@ -2712,7 +2712,18 @@ const server = http.createServer(async (req, res)=>{
     }
     // -------------------------------------------------------------------------
 
-    if (url === '/api/health') return send(res,200,{ok:true, products:data.products.length});
+    if (url === '/api/health'){
+      let disk={};
+      try{ const st=fs.statSync(DATA); const raw=JSON.parse(fs.readFileSync(DATA,'utf8'));
+        disk={ mtime:new Date(st.mtimeMs).toISOString(), sizeKB:Math.round(st.size/1024),
+          diskNrsEmails:Object.keys(raw.nrsEmails||{}).length, diskNrsDaily:Object.keys(raw.nrsDaily||{}).length,
+          diskProducts:(raw.products||[]).length }; }catch(e){ disk={ error:String(e&&e.message||e) }; }
+      return send(res,200,{ ok:true, products:data.products.length,
+        dataDir:DATA_DIR, pid:process.pid, uptimeSec:Math.round(process.uptime()),
+        memNrsEmails:Object.keys(data.nrsEmails||{}).length, memNrsDaily:Object.keys(data.nrsDaily||{}).length,
+        memNrsSalesDaily:Object.keys(data.salesDaily||{}).filter(k=>k.startsWith('nrs|')).length,
+        lastCommitAt:(data.nrsMeta||{}).lastCommitAt||null, disk });
+    }
 
     if (url === '/api/state' && req.method === 'GET')  return send(res,200,data);
     if (url === '/api/state' && req.method === 'PUT'){
