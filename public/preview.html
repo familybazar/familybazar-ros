@@ -941,14 +941,16 @@ function mfEditDay(d){ mfDate=d; mfDirty=false; go('cashentry'); }
    CASH ENTRY — fast daily worksheet. Two columns (General + Phone), inline fields,
    live math without full re-render (summaries updated in place). Mobile-first.
    ============================================================ */
-let mfDate=(new Date()).toISOString().slice(0,10), mfDirty=false, mfBeforeBound=false;
+let mfDate=(new Date()).toISOString().slice(0,10), mfDirty=false, mfBeforeBound=false, mfRecEditId=null;
 function mfShiftDate(days){ const d=new Date(mfDate+'T12:00:00'); d.setDate(d.getDate()+days); mfNavDate(d.toISOString().slice(0,10)); }
 function mfNavDate(dstr){ if(mfDirty && !confirm('You have unsaved changes for '+mfDate+'. Leave without saving?'))return; mfDirty=false; mfDate=dstr; render(); }
-function mfN(path,val,ph){ return `<input type="number" inputmode="decimal" step="0.01" data-mf="${path}" value="${val!=null&&val!==''?val:''}" placeholder="${ph||'0'}" oninput="mfTouch()" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:16px;text-align:right;background:#fff">`; }
+function mfN(path,val,ph){ return `<input type="number" inputmode="decimal" step="0.01" data-mf="${path}" value="${val!=null&&val!==''?val:''}" placeholder="${ph||'0'}" oninput="mfTouch()" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;text-align:right;background:#fff">`; }
+function mfMoney(path,val){ return `<div style="position:relative"><span style="position:absolute;left:12px;top:11px;color:#9aa1ad;font-size:15px;pointer-events:none">$</span><input type="number" inputmode="decimal" step="0.01" data-mf="${path}" value="${val!=null&&val!==''?val:''}" placeholder="0" oninput="mfTouch()" style="width:100%;padding:10px 12px 10px 24px;border:1px solid var(--line);border-radius:10px;font-size:16px;text-align:right;background:#fff"></div>`; }
+function mfPct(path,val){ return `<div style="position:relative"><input type="number" inputmode="decimal" step="0.1" data-mf="${path}" value="${val!=null&&val!==''?val:''}" placeholder="${String(mfDefGp())}" oninput="mfTouch()" style="width:100%;padding:10px 24px 10px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;text-align:right;background:#fff"><span style="position:absolute;right:12px;top:11px;color:#9aa1ad;font-size:15px;pointer-events:none">%</span></div>`; }
 function mfT(path,val,ph){ return `<input type="text" data-mf="${path}" value="${val!=null?esc(String(val)):''}" placeholder="${ph||''}" oninput="mfTouch()" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:15px;background:#fff">`; }
 function mfLbl(t){ return `<div style="font-size:12px;color:var(--muted);margin:0 0 3px">${t}</div>`; }
 function mfField(label,inp){ return `<div style="margin-bottom:8px">${mfLbl(label)}${inp}</div>`; }
-function mfAmtRow(label,path,val){ return `<div style="display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;margin-bottom:6px"><span style="font-size:14px">${label}</span>${mfN(path,val)}</div>`; }
+function mfAmtRow(label,path,val){ return `<div style="display:grid;grid-template-columns:1fr 140px;gap:10px;align-items:center;margin-bottom:7px"><span style="font-size:14px;color:#3d4353">${label}</span>${mfMoney(path,val)}</div>`; }
 function mfReadForm(){ const rec={general:{},phone:{}};
   document.querySelectorAll('#cashform [data-mf]').forEach(el=>{ const parts=el.dataset.mf.split('.'); let o=rec;
     for(let i=0;i<parts.length-1;i++){ const k=parts[i],nk=parts[i+1]; if(o[k]==null)o[k]=(/^\d+$/.test(nk))?[]:{}; o=o[k]; }
@@ -1004,47 +1006,49 @@ function viewCashEntry(){
      ${rem.up.length?`<div style="margin-top:8px;font-weight:700;font-size:12px;color:#6b7280">UPCOMING</div>${rem.up.map(remRow).join('')}`:''}
      <div style="margin-top:8px"><a class="sub" style="color:var(--blue);cursor:pointer;font-weight:700" onclick="go('recurring')">Manage recurring expenses →</a></div>
    </div></div>`:`<div class="sub" style="margin-bottom:10px">No bills due. <a style="color:var(--blue);cursor:pointer;font-weight:600" onclick="go('recurring')">Set up recurring expenses →</a></div>`;
-  const liveBox=(bk,title)=>`<div class="card" style="margin-bottom:12px;border:1.5px solid #dfe6f5"><div class="bd" style="padding:12px 14px">
-     <div style="font-weight:800;margin-bottom:6px">${title}</div>
-     <div style="display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:13px">
-       <span class="sub">Sales</span><b id="sum_${bk}_sales">$0</b>
-       <span class="sub">Est. gross profit</span><b id="sum_${bk}_gp" style="color:#4f8f6a">$0</b>
-       <span class="sub">Est. COGS</span><b id="sum_${bk}_cogs">$0</b>
-       <span class="sub">Expenses</span><b id="sum_${bk}_exp">$0</b>
-       <span class="sub">Est. net profit</span><b id="sum_${bk}_net" style="color:#14213d">$0</b>
-     </div><div class="sub" id="sum_${bk}_margin" style="margin-top:4px">0% margin</div>
-   </div></div>`;
-  const sec=(t)=>`<div style="font-weight:700;font-size:13px;margin:14px 0 6px;color:#3d4353">${t}</div>`;
-  const genCol=`<div class="card"><div class="bd" style="padding:14px 16px">
-     <div style="font-weight:800;font-size:16px;margin-bottom:8px">💵 General Cash</div>
-     ${liveBox('general','General summary')}
+  const liveBox=(bk,accent)=>`<div style="background:linear-gradient(180deg,#f7f9ff,#eef2fb);border:1px solid #dfe6f5;border-radius:12px;padding:12px 14px;margin-bottom:14px">
+     <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="sub">Estimated net profit</span><b id="sum_${bk}_net" style="font-size:23px;color:#14213d;letter-spacing:-.5px">$0</b></div>
+     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px;font-size:12px">
+       <div><div class="sub">Sales</div><b id="sum_${bk}_sales" style="font-size:14px">$0</b></div>
+       <div><div class="sub">Gross profit</div><b id="sum_${bk}_gp" style="font-size:14px;color:#4f8f6a">$0</b></div>
+       <div><div class="sub">Expenses</div><b id="sum_${bk}_exp" style="font-size:14px">$0</b></div>
+     </div>
+     <div class="sub" id="sum_${bk}_margin" style="margin-top:8px">0% margin</div>
+   </div>`;
+  const tiles=`<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px">
+     <div class="kpi"><div class="t">Total sales</div><div class="v" id="sum_combined_sales" style="font-size:21px">$0</div></div>
+     <div class="kpi"><div class="t">Gross profit</div><div class="v" id="sum_combined_gp" style="font-size:21px;color:#4f8f6a">$0</div></div>
+     <div class="kpi"><div class="t">Expenses</div><div class="v" id="sum_combined_exp" style="font-size:21px">$0</div></div>
+     <div class="kpi" style="border-color:#c7d2fe;background:#f5f7ff"><div class="t">Estimated net profit</div><div class="v" id="sum_combined_net" style="font-size:21px">$0</div><div class="s" id="sum_combined_margin">0% margin</div></div>
+   </div>`;
+  const sec=(t)=>`<div style="font-weight:700;font-size:11px;letter-spacing:.5px;text-transform:uppercase;margin:16px 0 8px;color:#9aa1ad">${t}</div>`;
+  const col=(icon,name,bk,inner)=>`<div class="card"><div class="bd" style="padding:16px 18px">
+     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="width:30px;height:30px;border-radius:9px;background:${bk==='phone'?'#eef2ff':'#e8f5ee'};display:flex;align-items:center;justify-content:center;font-size:15px">${icon}</span><span style="font-weight:800;font-size:16px">${name}</span></div>
+     ${liveBox(bk)}${inner}</div></div>`;
+  const genCol=col('💵','General Cash','general',`
      ${sec('Today’s sales')}
-     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-       ${mfField('Sales amount',mfN('general.sales',g.sales))}
-       ${mfField('Profit %',mfN('general.gpPct',g.gpPct,String(mfDefGp())))}
+     <div style="display:grid;grid-template-columns:1fr 120px;gap:10px">
+       ${mfField('Sales amount',mfMoney('general.sales',g.sales))}
+       ${mfField('Profit %',mfPct('general.gpPct',g.gpPct))}
      </div>
      ${sec('Bills due today')}
      ${mfDueRows('general')}
      ${sec('Other expense today')}
-     <div>${gOne.length?gOne.map((o,i)=>mfOneRow('general',o,i)).join(''):'<div class="sub" style="margin-bottom:6px">None.</div>'}</div>
-     <button class="btn sec sm" onclick="mfAddOne('general')">＋ Add expense</button>
-   </div></div>`;
-  const phoneCol=`<div class="card"><div class="bd" style="padding:14px 16px">
-     <div style="font-weight:800;font-size:16px;margin-bottom:8px">📱 Phone Cash</div>
-     ${liveBox('phone','Phone summary')}
+     <div>${gOne.length?gOne.map((o,i)=>mfOneRow('general',o,i)).join(''):'<div class="sub" style="margin-bottom:8px">None yet.</div>'}</div>
+     <button class="btn sec sm" onclick="mfAddOne('general')">＋ Add expense</button>`);
+  const phoneCol=col('📱','Phone Cash','phone',`
      ${sec('Today’s sales')}
      ${mfAmtRow('Phone sales','phone.sales.phone',ps.phone)}
      ${mfAmtRow('Accessory sales','phone.sales.accessory',ps.accessory)}
      ${mfAmtRow('Repair income','phone.sales.repair',ps.repair)}
      ${mfAmtRow('Other sales','phone.sales.otherSales',ps.otherSales)}
      ${mfAmtRow('Other service income','phone.sales.service',ps.service)}
-     ${mfField('Profit % (phone)',mfN('phone.gpPct',p.gpPct,String(mfDefGp())))}
+     <div style="margin-top:8px;max-width:180px">${mfField('Profit %',mfPct('phone.gpPct',p.gpPct))}</div>
      ${sec('Bills due today')}
      ${mfDueRows('phone')}
      ${sec('Other expense today')}
-     <div>${pOne.length?pOne.map((o,i)=>mfOneRow('phone',o,i)).join(''):'<div class="sub" style="margin-bottom:6px">None.</div>'}</div>
-     <button class="btn sec sm" onclick="mfAddOne('phone')">＋ Add expense</button>
-   </div></div>`;
+     <div>${pOne.length?pOne.map((o,i)=>mfOneRow('phone',o,i)).join(''):'<div class="sub" style="margin-bottom:8px">None yet.</div>'}</div>
+     <button class="btn sec sm" onclick="mfAddOne('phone')">＋ Add expense</button>`);
   return `<div style="position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:8px">
      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
        <h1 class="hello" style="margin:0">Cash Entry</h1>
@@ -1057,24 +1061,51 @@ function viewCashEntry(){
        <span id="mfStatus" class="sub" style="margin-left:auto;color:#4f8f6a">${esc(savedAt)}</span>
      </div>
    </div>
+   <div style="font-weight:700;font-size:11px;letter-spacing:.5px;text-transform:uppercase;margin:14px 0 8px;color:#9aa1ad">Combined business estimate</div>
+   ${tiles}
    ${remCard}
-   ${liveBox('combined','Combined business estimate')}
    <form id="cashform" onsubmit="return false" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:4px">
      ${genCol}${phoneCol}
    </form>
    <div style="height:24px"></div>`;
 }
-/* ---- Recurring Expenses management page ---- */
+/* ---- Recurring Expenses — always-visible inline form + list ---- */
 function viewRecurring(){
   const mf=mfEnsure(); const items=(mf.recurring||[]).slice().sort((a,b)=>((mfNextDue(a)||'9999')<(mfNextDue(b)||'9999')?-1:1));
-  const rows=items.length?items.map(it=>{ const nd=mfNextDue(it); const o=nd?mfOcc(it.id,nd):null;
+  const it=mfRecEditId?items.find(x=>x.id===mfRecEditId):null;
+  const fs="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;box-sizing:border-box";
+  const lb=(t)=>`<div style="font-size:12px;color:var(--muted);margin:0 0 4px">${t}</div>`;
+  const form=`<div class="card" style="margin-bottom:16px"><div class="bd" style="padding:16px 18px">
+     <div style="font-weight:800;margin-bottom:12px">${it?'✏️ Edit recurring expense':'＋ Add a recurring expense'}</div>
+     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+       <div style="grid-column:span 2;min-width:200px">${lb('Expense name')}<input id="rcf_name" value="${it?esc(it.name):''}" placeholder="Rent, Employee salary, Wi-Fi…" style="${fs}"></div>
+       <div>${lb('Cash type')}<select id="rcf_book" style="${fs}"><option value="general" ${!it||it.book==='general'?'selected':''}>General Cash</option><option value="phone" ${it&&it.book==='phone'?'selected':''}>Phone Cash</option></select></div>
+       <div>${lb('Amount')}<div style="position:relative"><span style="position:absolute;left:12px;top:11px;color:#9aa1ad;pointer-events:none">$</span><input id="rcf_amt" type="number" step="0.01" value="${it&&it.amount!=null?it.amount:''}" placeholder="0" style="${fs};padding-left:24px;text-align:right"></div></div>
+       <div>${lb('Frequency')}<select id="rcf_freq" style="${fs}">${MF_FREQ.map(f=>`<option value="${f[0]}" ${it?(it.frequency===f[0]?'selected':''):(f[0]==='monthly'?'selected':'')}>${f[1]}</option>`).join('')}</select></div>
+       <div>${lb('Start date')}<input id="rcf_start" type="date" value="${it&&it.startDate?it.startDate:mfTodayStr()}" style="${fs}"></div>
+       <div>${lb('End date (optional)')}<input id="rcf_end" type="date" value="${it&&it.endDate?it.endDate:''}" style="${fs}"></div>
+       <div style="grid-column:1/-1">${lb('Notes (optional)')}<input id="rcf_note" value="${it?esc(it.note||''):''}" placeholder="Landlord, account #, reminder…" style="${fs}"></div>
+     </div>
+     <div style="display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">
+       <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="rcf_active" ${!it||it.active!==false?'checked':''}> Active</label>
+       <button class="btn" style="margin-left:auto" onclick="mfRecInlineSave()">${it?'Update expense':'Add expense'}</button>
+       ${it?`<button class="btn sec" onclick="mfRecEditId=null;render()">Cancel</button>`:''}
+     </div>
+   </div></div>`;
+  const rows=items.length?items.map(x=>{ const nd=mfNextDue(x); const o=nd?mfOcc(x.id,nd):null;
     const st=o&&o.status==='paid'?'<span class="pill in">Paid</span>':(nd&&nd<mfTodayStr()?'<span class="pill out">Overdue</span>':(nd===mfTodayStr()?'<span class="pill low">Due today</span>':'<span class="pill">Scheduled</span>'));
-    return `<tr><td style="font-weight:600">${esc(it.name)}${it.active===false?' <span class="pill">Inactive</span>':''}</td><td>${mfBookLabel(it.book)}</td><td class="right">${money2(it.amount)}</td><td>${mfFreqLabel(it.frequency)}</td><td>${nd||'—'}</td><td>${st}</td><td class="right"><button class="btn sec sm" onclick="mfRecModal('${it.id}')">Edit</button></td></tr>`;
-  }).join(''):`<tr><td colspan="7" class="sub" style="padding:18px">No recurring expenses yet. Add rent, employee salary, utilities, insurance…</td></tr>`;
-  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Recurring Expenses</h1><div><button class="btn sec" onclick="go('cashentry')">← Cash Entry</button> <button class="btn" onclick="mfRecModal()">＋ Add recurring</button></div></div>
-   <div class="sub" style="margin:6px 0 10px">Set these once. ROS shows each one on the Cash Entry page when it's due and tracks payment automatically — you only confirm the amount.</div>
+    return `<tr${x.id===mfRecEditId?' style="background:#eef2ff"':''}><td style="font-weight:600">${esc(x.name)}${x.active===false?' <span class="pill">Inactive</span>':''}</td><td>${mfBookLabel(x.book)}</td><td class="right">${money2(x.amount)}</td><td>${mfFreqLabel(x.frequency)}</td><td>${nd||'—'}</td><td>${st}</td><td class="right"><button class="btn sec sm" onclick="mfRecEdit('${x.id}')">Edit</button> <button class="btn sec sm" onclick="mfRecDel('${x.id}')">✕</button></td></tr>`;
+  }).join(''):`<tr><td colspan="7" class="sub" style="padding:18px">No recurring expenses yet — add your first one above.</td></tr>`;
+  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">Recurring Expenses</h1><button class="btn sec" onclick="go('cashentry')">← Cash Entry</button></div>
+   <div class="sub" style="margin:6px 0 12px">Set these once. ROS shows each on Cash Entry when it's due and tracks payment automatically — you only confirm the amount.</div>
+   ${form}
    <div class="card"><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Expense</th><th>Cash</th><th class="right">Amount</th><th>Frequency</th><th>Next due</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
 }
+function mfRecEdit(id){ mfRecEditId=id; render(); window.scrollTo(0,0); }
+function mfRecInlineSave(){ const name=val('rcf_name'); if(!name){toast('Enter an expense name');return}
+  const d={name,book:val('rcf_book'),amount:Number(val('rcf_amt'))||0,frequency:val('rcf_freq'),startDate:val('rcf_start')||mfTodayStr(),endDate:val('rcf_end')||'',note:val('rcf_note')||'',active:chk('rcf_active')};
+  const mf=mfEnsure(); if(mfRecEditId){ const t=mf.recurring.find(x=>x.id===mfRecEditId); if(t)Object.assign(t,d); mfRecEditId=null; } else { mf.recurring.push(Object.assign({id:uid('rc')},d)); }
+  save(); render(); toast('Saved'); }
 function mfRecModal(id){ const mf=mfEnsure(); const it=id?mf.recurring.find(x=>x.id===id):null;
   document.getElementById('mdl').innerHTML=`<div class="mh"><b>${id?'Edit':'Add'} recurring expense</b><button class="x" onclick="closeModal()">×</button></div>
    <div class="mb"><div class="fg">
