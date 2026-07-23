@@ -1437,7 +1437,7 @@ function extractCsvAttachments(raw){
    preview mode reports what WOULD import and changes nothing. Read-only mailbox (EXAMINE),
    never deletes or flags mail. Committing writes ONLY the NRS stores + the shared sales
    rollup; it does NOT touch products, stock, or the inventory master. */
-const NRS_PARSER_VERSION = 3;   // v3: fixed MIME header parsing (anchored fields, unfold)
+const NRS_PARSER_VERSION = 4;   // v4: store gross = net+discounts so Total-Sales math matches Clover
 function nrsNum(v){ if(v==null) return null; const str=String(v).replace(/[^0-9.\-]/g,''); if(str===''||str==='-'||str==='.') return null; const n=Number(str); return isFinite(n)?n:null; }
 // Collect text/plain + text/html bodies from a raw RFC822 message (mirrors the attachment walk).
 function nrsExtractBodies(raw){
@@ -1600,14 +1600,18 @@ function nrsCommit(rec){
       net:s.net, tax:s.tax, fees:s.fees, total:s.total, baskets:s.baskets, items:s.items,
       avgItems:s.avgItems, avgSale:s.avgSale, discounts:s.discounts };
     // Mirror into the shared sales store so existing dashboards read the authoritative body numbers.
+    // NRS "Net Sales" is already net of discounts, so store gross = net + discounts (pre-discount).
+    // That makes the dashboards' Total-Sales formula (gross − discounts + tax) equal net + tax for NRS,
+    // exactly matching NRS's own "Total Sales" and keeping the combined Overall tab correct.
+    const nNet=(s.net!=null?s.net:0), nDisc=(s.discounts!=null?s.discounts:0),
+          nTax=(s.tax!=null?s.tax:0), nFees=(s.fees!=null?s.fees:0);
     data.salesDaily['nrs|'+rec.businessDate]={ source:'nrs', date:rec.businessDate,
-      gross:+((s.net!=null?s.net:0)).toFixed(2), net:+((s.net!=null?s.net:0)).toFixed(2),
-      discounts:+((s.discounts!=null?s.discounts:0)).toFixed(2), refunds:0,
-      tax:+((s.tax!=null?s.tax:0)).toFixed(2), tip:0,
+      gross:+(nNet+nDisc).toFixed(2), net:+nNet.toFixed(2),
+      discounts:+nDisc.toFixed(2), refunds:0, tax:+nTax.toFixed(2), tip:0,
       units:(s.items!=null?s.items:(sr.totalUnits||0)),
       orders:(s.baskets!=null?s.baskets:0), aov:(s.avgSale!=null?s.avgSale:0),
       taxable:sr.dept?sr.dept.taxable.amount:0, nonTaxable:sr.dept?sr.dept.nonTaxable.amount:0,
-      total:(s.total!=null?s.total:null), fees:(s.fees!=null?s.fees:0),
+      total:(s.total!=null?s.total:+(nNet+nTax+nFees).toFixed(2)), fees:+nFees.toFixed(2),
       status:'imported', syncedAt:now(), report:'email' };
   }
   if(rec.businessDate && rec.sales && rec.sales.items){

@@ -822,13 +822,17 @@ function salesNrsBody(){
    </div>
    ${inRangeToday&&!hasToday?`<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:14px"><div class="bd" style="display:flex;align-items:center;gap:10px"><span class="pill low">Pending</span><span>Today’s NRS report (${today}) hasn’t arrived/imported yet. It posts once the daily email is received.</span></div></div>`:''}
    <div class="kpis">
-    ${kpi('Net sales',money2(s.net),SALES_PRESETS.find(p=>p[0]===salesRangeKey)[1])}
-    ${kpi('Gross sales',money2(s.gross))}
+    ${kpi('Total sales',money2((s.gross||0)-(s.discounts||0)+(s.tax||0)),'collected incl. tax · = NRS Total Sales')}
+    ${kpi('Net sales',money2(s.net),'net of discounts · = NRS Net Sales')}
+    ${kpi('Tax collected',money2(s.tax||0))}
+    ${kpi('Discounts',money2(s.discounts||0),null,s.discounts?'#b56a6a':'')}
+    ${kpi('Baskets',(s.orders||0).toLocaleString())}
+    ${kpi('Avg sale',money2(s.aov||0))}
     ${kpi('Items sold',(s.units||0).toLocaleString())}
     ${kpi('Days reported',(s.days||0)+(inRangeToday&&!hasToday?' · today pending':''))}
    </div>
-   <div class="card"><div class="hd"><b>Daily reports</b><span class="sub">browse by business date</span></div><div class="bd"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Day</th><th class="right">Net sales</th><th class="right">Taxable</th><th class="right">Non-taxable</th><th class="right">Units</th><th>Status</th></tr></thead><tbody>
-     ${rows.length?rows.map(d=>`<tr><td style="font-weight:600">${d.date}</td><td class="sub">${dowShort(d.date)}</td><td class="right" style="font-weight:700">${money2(d.net)}</td><td class="right sub">${d.taxable?money2(d.taxable):'—'}</td><td class="right sub">${d.nonTaxable?money2(d.nonTaxable):'—'}</td><td class="right">${(d.units||0).toLocaleString()}</td><td><span class="pill in">Imported</span>${d.syncedAt?` <span class="sub" style="font-size:11px">${fTimeAgo(d.syncedAt)}</span>`:''}</td></tr>`).join(''):`<tr><td colspan="7" class="sub" style="padding:18px">No NRS reports in this range yet.</td></tr>`}
+   <div class="card"><div class="hd"><b>Daily reports</b><span class="sub">browse by business date</span></div><div class="bd"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Day</th><th class="right">Total sales</th><th class="right">Net sales</th><th class="right">Tax</th><th class="right">Baskets</th><th class="right">Items</th><th class="right">Taxable</th><th class="right">Non-taxable</th><th>Status</th></tr></thead><tbody>
+     ${rows.length?rows.map(d=>`<tr><td style="font-weight:600">${d.date}</td><td class="sub">${dowShort(d.date)}</td><td class="right" style="font-weight:700">${money2((d.gross||0)-(d.discounts||0)+(d.tax||0))}</td><td class="right">${money2(d.net)}</td><td class="right sub">${money2(d.tax||0)}</td><td class="right sub">${(d.orders||0).toLocaleString()}</td><td class="right sub">${(d.units||0).toLocaleString()}</td><td class="right sub">${d.taxable?money2(d.taxable):'—'}</td><td class="right sub">${d.nonTaxable?money2(d.nonTaxable):'—'}</td><td><span class="pill in">Imported</span>${d.syncedAt?` <span class="sub" style="font-size:11px">${fTimeAgo(d.syncedAt)}</span>`:''}</td></tr>`).join(''):`<tr><td colspan="10" class="sub" style="padding:18px">No NRS reports in this range yet.</td></tr>`}
    </tbody></table></div></div></div>`;
 }
 function finCogs(days){if(typeof days==='string')days=presetDays(days);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let cogs=0;(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=byId[e.productId];if(p)cogs+=Math.abs(e.qtyChange)*(p.costPrice||0);});return cogs;}
