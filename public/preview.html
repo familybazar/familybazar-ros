@@ -1046,11 +1046,12 @@ function mfExpAdd(book,freq){ recPrefill={book,name:'',category:'Other',frequenc
 function mfExpRemove(id){ if(!confirm('Remove this expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=(mf.recurring||[]).filter(x=>x.id!==id); save(); render(); toast('Removed'); }
 // Prepared common-bill catalog per book+frequency — owner just fills amount/due/paid (no modal).
 const MF_PRESETS={
-  general:{ daily:['Daily supplies','Petty cash'], weekly:['Employee salary','Cleaning'], biweekly:['Payroll'],
-    monthly:['Rent','Electric bill','Phone','Wi-Fi','Garbage','Water','Gas','Insurance','Loan payment','Credit card payment','Business tax'],
-    yearly:['Business license','Permit renewal','Annual insurance','Accountant fee'], once:['Repairs','Equipment','Renovation'] },
-  phone:{ daily:[], weekly:['Employee salary'], biweekly:['Payroll'],
-    monthly:['Booth rent','Phone line','Software subscription','Insurance'], yearly:['License renewal'], once:['Equipment','Repairs'] }
+  general:{ daily:[], weekly:['Employee Pay'], biweekly:['Employee Pay'],
+    monthly:['Rent','Electric Bill','Wi-Fi','Phone','Garbage','National Grid'],
+    yearly:['Insurance'], once:[] },
+  phone:{ daily:[], weekly:['Employee Pay'], biweekly:['Employee Pay'],
+    monthly:['Rent','Electric Bill','Wi-Fi','Phone','Garbage','National Grid'],
+    yearly:['Insurance'], once:[] }
 };
 function mfFindExp(book,name,freq){ return (mfEnsure().recurring||[]).find(x=>x.book===book&&(x.name||'').trim().toLowerCase()===String(name).trim().toLowerCase()&&x.frequency===freq); }
 function mfExpEnsure(book,name,freq){ let it=mfFindExp(book,name,freq); if(!it){ it={id:uid('rc'),book,name,category:'Other',frequency:freq,amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}; mfEnsure().recurring.push(it); } return it; }
