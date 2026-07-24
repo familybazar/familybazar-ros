@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Family Bazar — Retail OS (New Design Preview)</title>
+<title>Family Bazar - Retail OS (New Design Preview)</title>
 <style>
   :root{
     --bg:#f5f6f8; --card:#ffffff; --line:#ececf0; --ink:#161a26; --muted:#6b7280;
@@ -268,7 +268,7 @@ function viewOverview(){
   const hi=new Date().getHours();const greet=hi<12?'Good morning':hi<18?'Good afternoon':'Good evening';
   const today=new Date().toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
   const H=D.health;const chart=D.today?(D.rev>0?hourChart(D.hours):''):(D.rev>0?dayBars(D.byDay,salesRangeKey):'');
-  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">${greet} — ${today} <small>Store open · <span class="dot"></span>NRS synced · <span class="dot"></span>Clover synced</small></h1>${salesRangeChips()}</div>
+  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 class="hello" style="margin:0">${greet} - ${today} <small>Store open · <span class="dot"></span>NRS synced · <span class="dot"></span>Clover synced</small></h1>${salesRangeChips()}</div>
   <div class="kpis">
     <div class="kpi"><div class="t">Revenue ${suf}</div><div class="v">${money(D.rev)}</div><div class="s">${D.units.toLocaleString()} items sold</div></div>
     <div class="kpi"><div class="t">Net profit <span class="sub">(est.)</span></div><div class="v">${money(D.net)}</div><div class="s">${D.margin.toFixed(0)}% margin</div></div>
@@ -298,7 +298,7 @@ function viewOverview(){
         ${D.fast.length?D.fast.map(x=>{const p=x.p;const s=stockState(p);return `<tr>
           <td style="font-weight:600"><span class="thumb" style="vertical-align:middle;margin-right:8px">${p.image?`<img src="${esc(p.image)}" style="width:100%;height:100%;object-fit:contain;border-radius:6px">`:'▪'}</span>${esc(p.name)} <span class="sub">${esc(p.sku||'')}</span></td>
           <td>${p.qty||0}</td><td><span class="pill ${s}">${s==='in'?'OK · '+(p.qty||0):s==='low'?'Low · '+(p.qty||0):'Out'}</span></td>
-          <td>${money2(effPrice(p)||0)}</td><td class="sub">${esc(p.aisle||'—')}${p.shelf?' · Shelf '+esc(p.shelf):''}</td></tr>`}).join(''):`<tr><td colspan="5" class="sub" style="padding:20px">No sales in this period yet.</td></tr>`}
+          <td>${money2(effPrice(p)||0)}</td><td class="sub">${esc(p.aisle||'-')}${p.shelf?' · Shelf '+esc(p.shelf):''}</td></tr>`}).join(''):`<tr><td colspan="5" class="sub" style="padding:20px">No sales in this period yet.</td></tr>`}
       </tbody></table></div></div>
     <div class="card"><div class="hd"><b>Needs your attention</b></div>
       <div class="bd">
@@ -319,7 +319,7 @@ function viewPlaceholder(k,name){
   return `<div class="placeholder">
     <div style="font-size:15px;color:#9aa1ad">Family Bazar · Retail OS</div>
     <h2>${esc(name)}</h2>
-    ${live?`<p>This module works in your current app. In this new design it's coming in <b>Phase 2</b> — same data, new look.</p>
+    ${live?`<p>This module works in your current app. In this new design it's coming in <b>Phase 2</b> - same data, new look.</p>
       <button class="btn" onclick="window.location.href='/classic'">Open ${esc(name)} in the classic ROS →</button>`
     :`<p>This is a <b>new module</b> in the design (Finance / Operations / Reports). It'll be built next as we add its backend.</p>
       <button class="btn ghost" onclick="go('overview')">← Back to Overview</button>`}
@@ -396,28 +396,28 @@ function viewProducts(){
 function prows(){const l=pList();if(!l.length)return `<tr><td colspan="11" class="sub" style="padding:22px">No products match these filters.</td></tr>`;
   return l.slice(0,400).map(p=>{const st=stockState(p);const mp=marginPct(p);return `<tr>
    <td style="min-width:230px"><a onclick="openDetail('${p.id}')" style="cursor:pointer;color:inherit;display:inline-flex;align-items:center">${thumb(p,34)}<span><span style="font-weight:600">${esc(p.name)}</span> ${srcBadge(p.source)}${p.brand?`<div class="sub" style="font-size:11px">${esc(p.brand)}</div>`:''}</span></a></td>
-   <td class="sub" style="white-space:nowrap">${esc(p.sku||'—')}</td>
-   <td>${esc(p.category||'—')}</td>
+   <td class="sub" style="white-space:nowrap">${esc(p.sku||'-')}</td>
+   <td>${esc(p.category||'-')}</td>
    <td><span class="pill ${st}">${st==='out'?'Out':(st==='low'?'Low · ':'')+(p.qty||0)}</span></td>
    <td class="right">${money2(effPrice(p)||0)}</td>
-   <td class="right sub">${p.costPrice!=null&&p.costPrice!==''?money2(p.costPrice):'—'}</td>
-   <td class="right">${mp!=null?`<span style="color:${mp>=0?'#4f8f6a':'#b56a6a'};font-weight:600">${Math.round(mp)}%</span>`:'<span class="sub">—</span>'}</td>
-   <td class="sub" style="white-space:nowrap">${p.aisle?esc(p.aisle)+(p.shelf?' · Shelf '+esc(p.shelf):''):'—'}</td>
+   <td class="right sub">${p.costPrice!=null&&p.costPrice!==''?money2(p.costPrice):'-'}</td>
+   <td class="right">${mp!=null?`<span style="color:${mp>=0?'#4f8f6a':'#b56a6a'};font-weight:600">${Math.round(mp)}%</span>`:'<span class="sub">-</span>'}</td>
+   <td class="sub" style="white-space:nowrap">${p.aisle?esc(p.aisle)+(p.shelf?' · Shelf '+esc(p.shelf):''):'-'}</td>
    <td class="sub" style="white-space:nowrap">${chans(p).join(' · ')}</td>
    <td>${statusPill(p)}</td>
    <td class="right" style="white-space:nowrap"><button class="btn sec sm" onclick="editProduct('${p.id}')">Edit</button> <button class="btn sec sm" onclick="adjStock('${p.id}')">Stock</button></td></tr>`}).join('')+(l.length>400?`<tr><td colspan="11" class="sub" style="padding:8px">Showing 400 of ${l.length}. Refine filters to see more.</td></tr>`:'')}
 async function fillImagesNow(){if(!confirm('Fetch free product photos (Open Food Facts / UPCitemdb) for barcoded items that have no image? Runs in a batch.'))return;toast('Fetching images…');try{const r=await fetch('/api/catalog/fill-images',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({limit:60})});const d=await r.json();if(d.error)throw new Error(d.error);await load();render();toast('Added '+((d.imgSet||d.filled||0))+' image(s)');}catch(e){toast('Fill images failed: '+(e.message||e));}}
 async function imgCoverageNow(){
-  document.getElementById('mdl').innerHTML=`<div class="mh"><b>📊 Image coverage</b><button class="x" onclick="closeModal()">×</button></div><div class="mb"><div class="sub" style="padding:8px 0">Sampling 60 barcoded photo-less items against the free databases — about 30 seconds…</div></div>`;showModal();
+  document.getElementById('mdl').innerHTML=`<div class="mh"><b>📊 Image coverage</b><button class="x" onclick="closeModal()">×</button></div><div class="mb"><div class="sub" style="padding:8px 0">Sampling 60 barcoded photo-less items against the free databases - about 30 seconds…</div></div>`;showModal();
   try{const d=await(await fetch('/api/images/coverage',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sample:60})})).json();if(d.error)throw new Error(d.error);
-    const pct=Number(d.coveragePct)||0;const verdict=pct>=60?['Strong — a paid image API is likely worth it.','#eaf7ee','#166534']:pct>=30?['Moderate — a paid API helps; plan staff photos for the rest.','#fef3c7','#92400e']:['Low — most items aren’t in the databases; staff photos will do the work.','#fee2e2','#991b1b'];
+    const pct=Number(d.coveragePct)||0;const verdict=pct>=60?['Strong - a paid image API is likely worth it.','#eaf7ee','#166534']:pct>=30?['Moderate - a paid API helps; plan staff photos for the rest.','#fef3c7','#92400e']:['Low - most items aren’t in the databases; staff photos will do the work.','#fee2e2','#991b1b'];
     const row=(l,v,mut)=>`<div style="display:flex;justify-content:space-between;margin:2px 0${mut?';color:var(--muted)':''}"><span>${l}</span><b>${v}</b></div>`;
     document.getElementById('mdl').innerHTML=`<div class="mh"><b>📊 Image coverage</b><button class="x" onclick="closeModal()">×</button></div><div class="mb">
       <div style="font-size:38px;font-weight:900;line-height:1">~${pct}%</div><div class="sub">of barcoded, photo-less items would get a <b>free</b> photo</div>
-      <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">${row('Products total',d.totalProducts)}${row('Already have a photo',d.withImage)}${row('No photo',d.withoutImage)}${row('— with barcode (checkable)',d.sampleable,true)}${row('— no barcode (needs staff photo)',d.noBarcode,true)}</div>
-      <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px"><div class="sub">Sampled ${d.sampled}: found ${d.matched} images (Open Food Facts ${d.bySource.off}, UPCitemdb ${d.bySource.upcitemdb}${d.upcKeySet?'':' — trial'})</div><div style="margin-top:6px"><b>Projected: ~${d.estimatedNewImages}</b> free photos across your ${d.sampleable} barcoded items.</div></div>
+      <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">${row('Products total',d.totalProducts)}${row('Already have a photo',d.withImage)}${row('No photo',d.withoutImage)}${row('- with barcode (checkable)',d.sampleable,true)}${row('- no barcode (needs staff photo)',d.noBarcode,true)}</div>
+      <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px"><div class="sub">Sampled ${d.sampled}: found ${d.matched} images (Open Food Facts ${d.bySource.off}, UPCitemdb ${d.bySource.upcitemdb}${d.upcKeySet?'':' - trial'})</div><div style="margin-top:6px"><b>Projected: ~${d.estimatedNewImages}</b> free photos across your ${d.sampleable} barcoded items.</div></div>
       <div style="margin-top:10px;padding:8px 10px;border-radius:8px;background:${verdict[1]};color:${verdict[2]};font-weight:600">${verdict[0]}</div>
-      <div class="sub" style="margin-top:8px;font-size:11px">Read-only — nothing was changed.</div>
+      <div class="sub" style="margin-top:8px;font-size:11px">Read-only - nothing was changed.</div>
     </div>`;
   }catch(e){document.getElementById('mdl').innerHTML=`<div class="mh"><b>Coverage check failed</b><button class="x" onclick="closeModal()">×</button></div><div class="mb"><div class="sub" style="padding:8px 0">${esc(e.message||String(e))}</div></div>`;}
 }
@@ -425,7 +425,7 @@ async function enrichAll(){if(!confirm('Auto-fill category, brand, description a
   toast('Enriching a batch… this can take a moment');
   try{const r=await fetch('/api/catalog/enrich',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({limit:40})});const d=await r.json();if(d.error)throw new Error(d.error);
     await load();render();
-    toast('Enriched '+(d.processed||0)+' · categories '+(d.catSet||0)+', brands '+(d.brandSet||0)+', images '+(d.imgSet||0)+'. '+(d.remaining||0)+' still need info'+(d.remaining?' — click Enrich all again':'.'));
+    toast('Enriched '+(d.processed||0)+' · categories '+(d.catSet||0)+', brands '+(d.brandSet||0)+', images '+(d.imgSet||0)+'. '+(d.remaining||0)+' still need info'+(d.remaining?' - click Enrich all again':'.'));
   }catch(e){toast('Enrich failed: '+(e.message||e))}}
 function editProduct(id){const p=id?(S.products||[]).find(x=>x.id===id):null;const g=k=>p&&p[k]!=null?esc(p[k]):'';
   document.getElementById('mdl').innerHTML=`<div class="mh"><b>${id?'Edit':'Add'} product</b><button class="x" onclick="closeModal()">×</button></div>
@@ -454,7 +454,7 @@ function editProduct(id){const p=id?(S.products||[]).find(x=>x.id===id):null;con
   showModal()}
 async function aiLookup(){const bc=val('e_barcode');const st=document.getElementById('e_lookstat');
   if(!bc){if(st){st.style.display='';st.textContent='Enter a barcode/UPC first, then tap AI lookup.'}return}
-  st.style.display='';st.textContent='Looking up '+bc+' — free databases (Open Food Facts, UPCitemdb) + AI…';
+  st.style.display='';st.textContent='Looking up '+bc+' - free databases (Open Food Facts, UPCitemdb) + AI…';
   try{const r=await fetch('/api/catalog/lookup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({barcode:bc})});const d=await r.json();
     const s=d.suggestion||{};
     if(s.name)document.getElementById('e_name').value=s.name;
@@ -473,7 +473,7 @@ function saveProduct(id){const name=val('e_name');if(!name){toast('Name is requi
   save();closeModal();render();toast('Saved')}
 function delProduct(id){if(!confirm('Delete this product? This cannot be undone.'))return;S.products=(S.products||[]).filter(p=>p.id!==id);save();closeModal();render();toast('Deleted')}
 function adjStock(id){const p=(S.products||[]).find(x=>x.id===id);
-  document.getElementById('mdl').innerHTML=`<div class="mh"><b>Adjust stock — ${esc(p.name)}</b><button class="x" onclick="closeModal()">×</button></div>
+  document.getElementById('mdl').innerHTML=`<div class="mh"><b>Adjust stock - ${esc(p.name)}</b><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb"><p class="sub" style="margin-top:0">On hand now: <b style="color:#161a26">${p.qty||0}</b></p><div class="fg">
    <div class="fld"><label>Action</label><select id="a_t"><option value="in">Receive stock (+)</option><option value="out">Sale / remove (−)</option><option value="set">Set exact count</option></select></div>
    <div class="fld"><label>Quantity</label><input id="a_q" type="number" value="1"></div></div></div>
@@ -487,7 +487,7 @@ function applyStock(id){const p=(S.products||[]).find(x=>x.id===id);const t=val(
 let invFilter='all',invSearch='';
 function invClass(p){const s=stockState(p);if(s==='out')return 'out';if(s==='low')return 'low';if((p.qty||0)>=(p.overstockThreshold||50))return 'over';const cut=Date.now()-45*864e5;if((p.qty||0)>0&&(!p.lastSale||new Date(p.lastSale).getTime()<cut))return 'dead';return 'healthy'}
 function reorderQty(p){const t=(p.reorderThreshold||0)*3;const q=t-(p.qty||0);return q>0?q:0}
-function lastSold(p){if(!p.lastSale)return '—';const d=new Date(p.lastSale);const n=new Date();const diff=Math.floor((new Date(n.getFullYear(),n.getMonth(),n.getDate())-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/864e5);if(diff<=0)return 'Today';if(diff===1)return 'Yesterday';if(diff<7)return diff+' days ago';return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})}
+function lastSold(p){if(!p.lastSale)return '-';const d=new Date(p.lastSale);const n=new Date();const diff=Math.floor((new Date(n.getFullYear(),n.getMonth(),n.getDate())-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/864e5);if(diff<=0)return 'Today';if(diff===1)return 'Yesterday';if(diff<7)return diff+' days ago';return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})}
 const INVPILL={healthy:['in','Healthy'],low:['low','Low'],out:['out','Out of stock'],over:['over','Overstock'],dead:['dead','Dead']};
 function viewInventory(){
   const P=S.products||[];const cnt={all:P.length,low:0,out:0,over:0,dead:0};
@@ -523,13 +523,13 @@ function viewInventory(){
       <td style="min-width:240px"><a onclick="openDetail('${p.id}')" style="cursor:pointer;color:inherit;display:inline-flex;align-items:center">${thumb(p,34)}<span><span style="font-weight:600">${esc(p.name)}</span>${sub?`<div class="sub" style="font-size:11px">${esc(sub)}</div>`:''}</span></a></td>
       <td class="right" style="font-weight:700;color:${c==='out'?'#b56a6a':c==='low'?'#a97e33':'#161a26'}">${p.qty||0}</td>
       <td class="right sub">${p.reorderThreshold||0}</td>
-      <td>${ro>0?`<a style="color:var(--blue);font-weight:600;cursor:pointer;white-space:nowrap" onclick="adjStock('${p.id}')">Order ${ro}</a>`:'<span class="sub">—</span>'}</td>
-      <td class="sub" style="white-space:nowrap">${p.aisle?esc(p.aisle)+(p.shelf?' · Shelf '+esc(p.shelf):''):'—'}</td>
-      <td class="sub">${esc(p.supplier||'—')}</td>
+      <td>${ro>0?`<a style="color:var(--blue);font-weight:600;cursor:pointer;white-space:nowrap" onclick="adjStock('${p.id}')">Order ${ro}</a>`:'<span class="sub">-</span>'}</td>
+      <td class="sub" style="white-space:nowrap">${p.aisle?esc(p.aisle)+(p.shelf?' · Shelf '+esc(p.shelf):''):'-'}</td>
+      <td class="sub">${esc(p.supplier||'-')}</td>
       <td class="sub" style="white-space:nowrap">${lastSold(p)}</td>
       <td>${invStatus(c)}</td></tr>`}).join(''):`<tr><td colspan="8" class="sub" style="padding:26px;text-align:center">Nothing in this view.</td></tr>`}
   </tbody></table></div>
-  ${total?`<div class="sub" style="padding:10px 4px 6px">Showing ${Math.min(CAP,total)} of ${total.toLocaleString()}${total>CAP?' — search or filter to narrow down':''}</div>`:''}</div></div>`;
+  ${total?`<div class="sub" style="padding:10px 4px 6px">Showing ${Math.min(CAP,total)} of ${total.toLocaleString()}${total>CAP?' - search or filter to narrow down':''}</div>`:''}</div></div>`;
 }
 /* ---------- Product detail ---------- */
 function prodStats(p){
@@ -559,14 +559,14 @@ function viewProductDetail(id){
   const chanOrder=['In-store','Website','Amazon','Walmart','TikTok Shop'];const cmax=Math.max(1,...Object.values(s.chan));
   const chanBars=chanOrder.filter(c=>s.chan[c]).map(c=>`<div class="cbar"><span class="nm">${c}</span><span class="tr"><span class="fl" style="width:${Math.round(s.chan[c]/cmax*100)}%"></span></span><span class="vl">${s.chan[c]} sold</span></div>`).join('')||'<div class="sub" style="padding:6px 0">No channel sales in the last 30 days.</div>';
   const wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const bestDays=Object.entries(s.dayUnits).sort((a,b)=>b[1]-a[1]).slice(0,2).map(x=>wd[x[0]]).join(' · ')||'—';
+  const bestDays=Object.entries(s.dayUnits).sort((a,b)=>b[1]-a[1]).slice(0,2).map(x=>wd[x[0]]).join(' · ')||'-';
   const trendTxt=s.trend==null?'Not enough history':(s.trend>=1?`▲ ${s.trend.toFixed(1)}× vs last month`:`▼ ${Math.round(s.trend*100)}% of last month`);
   const sugs=[];
   if(s.rate>0.3&&mp!=null&&mp<60){const np=pr*1.08;sugs.push({t:`Raise price to $${np.toFixed(2)}`,d:`Selling ~${s.rate.toFixed(1)}/day at $${pr.toFixed(2)}. A small increase may lift margin with little demand loss.`,btn:'Apply',fn:`applyPriceSug('${p.id}',${np.toFixed(2)})`});}
   if(cls==='out'||cls==='low'){const q=reorderQty(p);sugs.push({t:`Restock ${q} units now`,d:s.dts!=null?`~${s.dts} days of cover left at the current pace (${s.rate.toFixed(1)}/day).`:`Below reorder level (${p.reorderThreshold||0} min).`,btn:'Add to purchase list',fn:`addPurchase('${p.id}',${q})`});}
   if(cls==='over'||cls==='dead'){sugs.push({t:'Run a promo to clear stock',d:`${p.qty||0} on hand${cls==='dead'?', no recent sales':''}. A markdown or bundle frees up cash.`,btn:'Set sale price',fn:`editProduct('${p.id}')`});}
   if(!p.image||!p.description){sugs.push({t:'Improve listing content',d:`Missing ${!p.image?'image':''}${(!p.image&&!p.description)?' and ':''}${!p.description?'description':''}. Enrich to help web + marketplace sales.`,btn:'Enrich',fn:`enrichOne('${p.id}')`});}
-  if(!sugs.length)sugs.push({t:'Healthy — no action needed',d:'Stock, pace and margin all look fine for this item.'});
+  if(!sugs.length)sugs.push({t:'Healthy - no action needed',d:'Stock, pace and margin all look fine for this item.'});
   const mk=(name,ok,txt)=>`<div class="mc"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:13px">${name}</span><span style="width:8px;height:8px;border-radius:50%;background:${ok?'#7cae90':'#cfd3db'}"></span></div><div class="sub" style="margin-top:4px;font-size:12px">${txt}</div></div>`;
   return `<div class="crumb"><a onclick="closeDetail()">← ${active==='inventory'?'Inventory':'Products'}</a> / ${esc(p.name)}</div>
    <div class="card"><div class="bd" style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-top:16px">
@@ -574,14 +574,14 @@ function viewProductDetail(id){
      <div style="flex:1;min-width:280px">
        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div>
          <h1 class="hello" style="margin:0">${esc(p.name)}</h1>
-         <div class="sub" style="margin-top:3px">${[p.sku,p.barcode,p.brand,p.category].filter(Boolean).map(esc).join(' · ')||'—'}</div>
+         <div class="sub" style="margin-top:3px">${[p.sku,p.barcode,p.brand,p.category].filter(Boolean).map(esc).join(' · ')||'-'}</div>
        </div><span class="pill ${pill[0]}">${pill[1]}</span></div>
        <div class="tiles">
          <div class="tile"><div class="tl">Stock</div><div class="tv" style="color:${cls==='out'?'#b56a6a':cls==='low'?'#a97e33':'#161a26'}">${p.qty||0}</div></div>
          <div class="tile"><div class="tl">Price</div><div class="tv">${money2(pr)}</div></div>
-         <div class="tile"><div class="tl">Cost</div><div class="tv">${p.costPrice!=null?money2(p.costPrice):'—'}</div></div>
-         <div class="tile"><div class="tl">Margin</div><div class="tv" style="color:#4f8f6a">${mp!=null?Math.round(mp)+'%':'—'}</div></div>
-         <div class="tile"><div class="tl">Shelf</div><div class="tv">${p.aisle?esc(p.aisle)+(p.shelf?' · '+esc(p.shelf):''):'—'}</div></div>
+         <div class="tile"><div class="tl">Cost</div><div class="tv">${p.costPrice!=null?money2(p.costPrice):'-'}</div></div>
+         <div class="tile"><div class="tl">Margin</div><div class="tv" style="color:#4f8f6a">${mp!=null?Math.round(mp)+'%':'-'}</div></div>
+         <div class="tile"><div class="tl">Shelf</div><div class="tv">${p.aisle?esc(p.aisle)+(p.shelf?' · '+esc(p.shelf):''):'-'}</div></div>
        </div>
        <div style="display:flex;gap:8px;flex-wrap:wrap">
          <button class="btn" onclick="adjStock('${p.id}')">Adjust stock</button>
@@ -597,8 +597,8 @@ function viewProductDetail(id){
          <div class="card"><div class="hd"><b>Inventory</b></div><div class="bd">
            <div class="drow"><span>Current quantity</span><b style="color:${cls==='out'?'#b56a6a':cls==='low'?'#a97e33':'#161a26'}">${p.qty||0} units</b></div>
            <div class="drow"><span>Reorder threshold</span><b>${p.reorderThreshold||0} units</b></div>
-           <div class="drow"><span>Last restock</span><b>${lastRestock?new Date(lastRestock.t).toLocaleDateString(undefined,{month:'short',day:'numeric'})+' · +'+lastRestock.e.qtyChange:'—'}</b></div>
-           <div class="drow"><span>Last sold</span><b>${lastSale?lastSold(p):'—'}</b></div>
+           <div class="drow"><span>Last restock</span><b>${lastRestock?new Date(lastRestock.t).toLocaleDateString(undefined,{month:'short',day:'numeric'})+' · +'+lastRestock.e.qtyChange:'-'}</b></div>
+           <div class="drow"><span>Last sold</span><b>${lastSale?lastSold(p):'-'}</b></div>
            <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.4px;margin:14px 0 6px">STOCK MOVEMENT · 14 DAYS</div>
            <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${bars}</svg>
          </div></div>
@@ -610,7 +610,7 @@ function viewProductDetail(id){
            </div>
            <div class="drow"><span>Trend</span><b style="color:${s.trend&&s.trend>=1?'#4f8f6a':'#6b7280'}">${trendTxt}</b></div>
            <div class="drow"><span>Best-selling days</span><b>${bestDays}</b></div>
-           <div class="drow"><span>Days until stockout</span><b style="color:${s.dts!=null&&s.dts<7?'#b56a6a':'#161a26'}">${s.dts!=null?'~'+s.dts+' days':'—'}</b></div>
+           <div class="drow"><span>Days until stockout</span><b style="color:${s.dts!=null&&s.dts<7?'#b56a6a':'#161a26'}">${s.dts!=null?'~'+s.dts+' days':'-'}</b></div>
            <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.4px;margin:14px 0 6px">CHANNEL PERFORMANCE · 30 DAYS</div>
            ${chanBars}
          </div></div>
@@ -628,7 +628,7 @@ function viewProductDetail(id){
          ${sugs.map(g=>`<div class="aisug"><h4>${esc(g.t)}</h4><p>${esc(g.d)}</p>${g.btn?`<button class="btn sm" onclick="${g.fn}">${g.btn}</button>`:''}</div>`).join('')}
        </div></div>
        <div class="card"><div class="hd"><b>Location</b></div><div class="bd">
-         <div class="loct"><div class="lc"><div class="k">AISLE</div><div class="v">${esc(p.aisle||'—')}</div></div><div class="lc"><div class="k">SHELF</div><div class="v">${esc(p.shelf||'—')}</div></div><div class="lc"><div class="k">BIN</div><div class="v">${esc(p.bin||'—')}</div></div></div>
+         <div class="loct"><div class="lc"><div class="k">AISLE</div><div class="v">${esc(p.aisle||'-')}</div></div><div class="lc"><div class="k">SHELF</div><div class="v">${esc(p.shelf||'-')}</div></div><div class="lc"><div class="k">BIN</div><div class="v">${esc(p.bin||'-')}</div></div></div>
          <button class="btn sec" style="width:100%;margin-top:12px" onclick="editProduct('${p.id}')">Change location</button>
        </div></div>
      </div>
@@ -661,7 +661,7 @@ function rangeLabel(range){const p=SALES_PRESETS.find(x=>x[0]===range);if(p)retu
 function salesAgg(range){const start=rangeStart(range);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let rev=0,units=0,tax=0;let chan={},byDay={};const cat={},prod={},dow={},hours=Array(24).fill(0);
   (S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<start)return;const u=Math.abs(e.qtyChange);const p=byId[e.productId];const r=(e.rev!=null)?e.rev:u*(p?(effPrice(p)||0):0);rev+=r;units+=u;tax+=(e.tax||0);const n=e.note||'';const ch=/clover/i.test(n)?'Clover':/nrs/i.test(n)?'NRS':/web/i.test(n)?'Website':'Other';chan[ch]=(chan[ch]||0)+r;const c=(p&&p.category)||'Uncategorized';cat[c]=(cat[c]||0)+r;const d=new Date(e.timestamp);byDay[d.toISOString().slice(0,10)]=(byDay[d.toISOString().slice(0,10)]||0)+r;dow[d.getDay()]=(dow[d.getDay()]||0)+r;hours[d.getHours()]+=r;if(p){const a=prod[p.id]||(prod[p.id]={p,u:0,r:0});a.u+=u;a.r+=r;}});
   // Sync totals to the accurate salesDaily store (Clover-matched). Keep category/product/hour/dow
-  // breakdowns from the event log — those are illustrative detail, not the reconciled headline numbers.
+  // breakdowns from the event log - those are illustrative detail, not the reconciled headline numbers.
   if(hasDaily()){ const r=rangeYmd(range); const dd=dailyAggClient(r.from,r.to);
     rev=dd.net; units=dd.units; tax=dd.tax; byDay=dd.byDay;
     chan={}; for(const s in dd.bySource){ chan[srcLabel(s)]=dd.bySource[s].net; } }
@@ -690,7 +690,7 @@ function dailyAggClient(from,to){
   return out;}
 function hasDaily(){return Object.keys(S.salesDaily||{}).length>0;}
 /* ============================================================
-   SALES v2 — Clover / NRS / Overall tabs, source-tagged, date-wise
+   SALES v2 - Clover / NRS / Overall tabs, source-tagged, date-wise
    ============================================================ */
 const SRC_META={clover:{label:'Clover',color:'#2447d6'},nrs:{label:'NRS',color:'#16a34a'},web:{label:'Website',color:'#d97706'},doordash:{label:'DoorDash',color:'#eb1700'},ubereats:{label:'Uber Eats',color:'#06c167'},grubhub:{label:'Grubhub',color:'#f63440'},other:{label:'Other',color:'#8a94a6'}};
 function srcLabel(s){return (SRC_META[s]||{label:s}).label;}
@@ -772,7 +772,7 @@ function salesOverallBody(){
    <div class="card"><div class="hd"><b>By source</b><span class="sub">each channel kept separate</span></div><div class="bd"><table><thead><tr><th>Source</th><th class="right">Net</th><th class="right">Gross</th><th class="right">Tax</th><th class="right">Units</th><th class="right">Txns</th><th class="right">Share</th></tr></thead><tbody>
      ${srcs.length?srcs.map(s=>`<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${srcColor(s.source)};margin-right:8px"></span><b>${srcLabel(s.source)}</b></td><td class="right" style="font-weight:700">${money2(s.net)}</td><td class="right sub">${money2(s.gross)}</td><td class="right sub">${money2(s.tax)}</td><td class="right">${(s.units||0).toLocaleString()}</td><td class="right">${s.orders||0}</td><td class="right sub">${netTot?Math.round(s.net/netTot*100):0}%</td></tr>`).join(''):`<tr><td colspan="7" class="sub" style="padding:18px">No sales in this range.</td></tr>`}
    </tbody></table></div></div>
-   <div class="card" style="margin-top:16px"><div class="hd"><b>Day by day — all sources</b></div><div class="bd">${salesCombinedDayTable()}</div></div>`;
+   <div class="card" style="margin-top:16px"><div class="hd"><b>Day by day - all sources</b></div><div class="bd">${salesCombinedDayTable()}</div></div>`;
 }
 function salesCombinedDayTable(){
   const byDay={};(salesData.rows||[]).forEach(d=>{const o=byDay[d.date]||(byDay[d.date]={date:d.date,clover:0,nrs:0,other:0,units:0});const b=(d.source==='clover')?'clover':(d.source==='nrs')?'nrs':'other';o[b]+=d.net||0;o.units+=d.units||0;});
@@ -817,7 +817,7 @@ function salesNrsBody(){
   const inRangeToday=(salesData.range.from<=today && salesData.range.to>=today);
   const lastSync=rows.map(d=>d.syncedAt).filter(Boolean).sort().slice(-1)[0];
   return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-     <span class="sub">NRS sends one report per day by email — it isn’t real-time. ${lastSync?'Last import: '+fTimeAgo(lastSync):'No imports yet.'}</span>
+     <span class="sub">NRS sends one report per day by email - it isn’t real-time. ${lastSync?'Last import: '+fTimeAgo(lastSync):'No imports yet.'}</span>
      <button class="btn sec" onclick="nrsEmailFetchNow()">✉ Fetch from Gmail now</button>
    </div>
    ${inRangeToday&&!hasToday?`<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-bottom:14px"><div class="bd" style="display:flex;align-items:center;gap:10px"><span class="pill low">Pending</span><span>Today’s NRS report (${today}) hasn’t arrived/imported yet. It posts once the daily email is received.</span></div></div>`:''}
@@ -832,7 +832,7 @@ function salesNrsBody(){
     ${kpi('Days reported',(s.days||0)+(inRangeToday&&!hasToday?' · today pending':''))}
    </div>
    <div class="card"><div class="hd"><b>Daily reports</b><span class="sub">browse by business date</span></div><div class="bd"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Day</th><th class="right">Total sales</th><th class="right">Net sales</th><th class="right">Tax</th><th class="right">Baskets</th><th class="right">Items</th><th class="right">Taxable</th><th class="right">Non-taxable</th><th>Status</th></tr></thead><tbody>
-     ${rows.length?rows.map(d=>`<tr><td style="font-weight:600">${d.date}</td><td class="sub">${dowShort(d.date)}</td><td class="right" style="font-weight:700">${money2((d.gross||0)-(d.discounts||0)+(d.tax||0))}</td><td class="right">${money2(d.net)}</td><td class="right sub">${money2(d.tax||0)}</td><td class="right sub">${(d.orders||0).toLocaleString()}</td><td class="right sub">${(d.units||0).toLocaleString()}</td><td class="right sub">${d.taxable?money2(d.taxable):'—'}</td><td class="right sub">${d.nonTaxable?money2(d.nonTaxable):'—'}</td><td><span class="pill in">Imported</span>${d.syncedAt?` <span class="sub" style="font-size:11px">${fTimeAgo(d.syncedAt)}</span>`:''}</td></tr>`).join(''):`<tr><td colspan="10" class="sub" style="padding:18px">No NRS reports in this range yet.</td></tr>`}
+     ${rows.length?rows.map(d=>`<tr><td style="font-weight:600">${d.date}</td><td class="sub">${dowShort(d.date)}</td><td class="right" style="font-weight:700">${money2((d.gross||0)-(d.discounts||0)+(d.tax||0))}</td><td class="right">${money2(d.net)}</td><td class="right sub">${money2(d.tax||0)}</td><td class="right sub">${(d.orders||0).toLocaleString()}</td><td class="right sub">${(d.units||0).toLocaleString()}</td><td class="right sub">${d.taxable?money2(d.taxable):'-'}</td><td class="right sub">${d.nonTaxable?money2(d.nonTaxable):'-'}</td><td><span class="pill in">Imported</span>${d.syncedAt?` <span class="sub" style="font-size:11px">${fTimeAgo(d.syncedAt)}</span>`:''}</td></tr>`).join(''):`<tr><td colspan="10" class="sub" style="padding:18px">No NRS reports in this range yet.</td></tr>`}
    </tbody></table></div></div></div>`;
 }
 function finCogs(days){if(typeof days==='string')days=presetDays(days);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let cogs=0;(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=byId[e.productId];if(p)cogs+=Math.abs(e.qtyChange)*(p.costPrice||0);});return cogs;}
@@ -849,7 +849,7 @@ function viewFinance(){
 }
 
 /* ============================================================
-   MANUAL FINANCE — owner bookkeeping. Two books: General Cash + Phone Cash (merged separately).
+   MANUAL FINANCE - owner bookkeeping. Two books: General Cash + Phone Cash (merged separately).
    Sales entered by hand + projected GP% → estimated gross profit / COGS; categorized expenses.
    ============================================================ */
 const MF_GROUPS={
@@ -867,7 +867,7 @@ function mfExpAmt(x,w){ if(x.recurring)return (+x.amount||0)*(w.days/30); const 
 function mfNum(v){return Number(v)||0;}
 /* ---- Recurring-expense engine: configure once, ROS computes due dates + tracks payments ---- */
 const MF_FREQ=[['daily','Daily'],['weekly','Weekly'],['biweekly','Bi-weekly'],['monthly','Monthly'],['yearly','Yearly'],['once','One-time']];
-function mfFreqLabel(f){const x=MF_FREQ.find(a=>a[0]===f);return x?x[1]:(f||'—');}
+function mfFreqLabel(f){const x=MF_FREQ.find(a=>a[0]===f);return x?x[1]:(f||'-');}
 function mfDaysInMonth(y,m){return new Date(y,m+1,0).getDate();}
 function mfAddDays(dstr,n){const d=new Date(dstr+'T12:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
 function mfTodayStr(){return new Date().toISOString().slice(0,10);}
@@ -943,7 +943,7 @@ function viewManualFinance(){
 function mfEditDay(d){ mfDate=d; mfDirty=false; go('cashentry'); }
 
 /* ============================================================
-   CASH ENTRY — fast daily worksheet. Two columns (General + Phone), inline fields,
+   CASH ENTRY - fast daily worksheet. Two columns (General + Phone), inline fields,
    live math without full re-render (summaries updated in place). Mobile-first.
    ============================================================ */
 let mfDate=(new Date()).toISOString().slice(0,10), mfDirty=false, mfBeforeBound=false, mfRecEditId=null;
@@ -1026,7 +1026,7 @@ function mfEstCombined(period){ const g=mfEstCompute('general',period),p=mfEstCo
   return {sales,gp:g.gp+p.gp,cogs:g.cogs+p.cogs,exp:g.exp+p.exp,net,days:g.days,margin:sales?net/sales*100:0}; }
 function mfExpPeriodTotal(book,period){ const days=mfPeriodDays(period);
   return (mfEnsure().recurring||[]).filter(it=>recLive(it)&&it.book===book&&it.frequency!=='once').reduce((a,it)=>a+mfPerDayCost(it)*days,0); }
-function mfPh(freq){ return {daily:'e.g. 50',weekly:'e.g. 1200',biweekly:'e.g. 2000',monthly:'e.g. 3000',yearly:'e.g. 8000',once:'e.g. 500'}[freq]||'0'; }
+function mfPh(freq){ return '0'; }
 /* ---- SVG icon set (no emoji) ---- */
 function mfIcon(name,size,color){ const s=size||18,c=color||'currentColor';
   const P={ save:'<path d="M5 3h10l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M8 3v5h6"/><path d="M8 13h8v7H8z"/>',
@@ -1049,7 +1049,7 @@ function mfExpSetFreq(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===
 function mfExpRename(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.name=v; save(); }
 function mfExpAdd(book,freq){ recPrefill={book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:'',startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true}; mfRecModal(); }
 function mfExpRemove(id){ if(!confirm('Remove this expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=(mf.recurring||[]).filter(x=>x.id!==id); save(); render(); toast('Removed'); }
-// Prepared common-bill catalog per book+frequency — owner just fills amount/due/paid (no modal).
+// Prepared common-bill catalog per book+frequency - owner just fills amount/due/paid (no modal).
 const MF_PRESETS={
   general:{ daily:[], weekly:['Employee Pay'], biweekly:['Employee Pay'],
     monthly:['Rent','Electric Bill','Wi-Fi','Phone','Garbage','National Grid'],
@@ -1175,7 +1175,6 @@ function viewCashEntry(){
        <div class="mf-tile"><div class="k">Expenses</div><div class="v">${money0(cb.exp)}</div></div>
        <div class="mf-tile net"><div class="k">Net profit / ${per}</div><div class="v" style="color:${cb.net>=0?'#8ef0b6':'#ffb3ad'}">${money0(cb.net)}</div></div>
      </div>
-     <div class="mf-note">${mfIcon('calendar',13,'#9fb0d4')} Weekly, monthly &amp; yearly bills are split into a per-day cost (÷7, ÷${dim}, ÷${diy}) and rolled up to the ${per} view.</div>
    </div>`;
   const inpMoney=(bk,field,val)=>`<div class="mf-inp"><span>$</span><input type="number" inputmode="decimal" step="0.01" value="${val!=null&&val!==''?val:''}" placeholder="0" onchange="mfSetDay('${bk}','${field}',this.value)"></div>`;
   const inpPct=(bk,val)=>`<div class="mf-inp pct"><input type="number" inputmode="decimal" step="0.1" value="${val!=null&&val!==''?val:''}" placeholder="${mfDefGp()}" onchange="mfSetDay('${bk}','gpPct',this.value)"><span>%</span></div>`;
@@ -1208,7 +1207,7 @@ function viewCashEntry(){
         const amtOn=it?`mfExpSetAmt('${it.id}',this.value)`:`mfPresetAmt('${book}',this.dataset.n,'${freq}',this.value)`;
         const dueOn=it?`mfExpSetDue('${it.id}',this.value)`:`mfPresetDue('${book}',this.dataset.n,'${freq}',this.value)`;
         const dataN=it?'':` data-n="${esc(presetName)}"`;
-        const paidCell=(it&&nd)?(paid?`<button class="mf-paid" onclick="mfUnpay('${it.id}','${nd}')">${mfIcon('check',12,'#227a4e')}Paid${paidTxt}</button>`:`<button class="mf-due" onclick="mfMarkPaid('${it.id}','${nd}')">Due — mark paid</button>`):`<span class="mf-hint">Enter amount</span>`;
+        const paidCell=(it&&nd)?(paid?`<button class="mf-paid" onclick="mfUnpay('${it.id}','${nd}')">${mfIcon('check',12,'#227a4e')}Paid${paidTxt}</button>`:`<button class="mf-due" onclick="mfMarkPaid('${it.id}','${nd}')">Mark paid</button>`):`<span class="mf-hint">Enter amount</span>`;
         const del=it?`<button class="mf-x" onclick="mfExpRemove('${it.id}')">${mfIcon('trash',15,'#9aa1ad')}</button>`:`<span></span>`;
         return `<div class="mf-exprow2">
            <div class="mf-namewrap">${nameCell}</div>
@@ -1220,9 +1219,8 @@ function viewCashEntry(){
      const used=new Set(); existing.forEach(it=>{ used.add((it.name||'').trim().toLowerCase()); if(it.preset)used.add(it.preset.trim().toLowerCase()); });
      const presets=((MF_PRESETS[book]||{})[cur]||[]).filter(nm=>!used.has(nm.toLowerCase()));
      let rowsHtml=existing.map(it=>rowFor(it,null,cur)).join('')+presets.map(nm=>rowFor(null,nm,cur)).join('');
-     if(!rowsHtml) rowsHtml=`<div class="sub" style="padding:6px 0">No ${mfFreqLabel(cur).toLowerCase()} expenses yet — add one below.</div>`;
-     return `<div class="mf-sec" style="margin-top:18px"><span>Expenses — enter once</span><span class="amt">${money2(mfExpPeriodTotal(book,period))} / ${per}</span></div>
-       <div class="sub" style="font-size:11.5px;margin:-4px 0 8px">Your common bills are listed — just fill the amount, due date, and mark paid. Names are editable; blank ones are ignored.</div>
+     if(!rowsHtml) rowsHtml=`<div class="sub" style="padding:6px 0">No ${mfFreqLabel(cur).toLowerCase()} expenses yet. Add one below.</div>`;
+     return `<div class="mf-sec" style="margin-top:18px"><span>Expenses</span><span class="amt">${money2(mfExpPeriodTotal(book,period))} / ${per}</span></div>
        <div class="mf-etabs">${tabBtns}</div>
        <div class="mf-exphead"><span>Expense</span><span>Amount</span><span>Due date</span><span>Paid?</span><span></span></div>
        ${rowsHtml}
@@ -1233,7 +1231,7 @@ function viewCashEntry(){
        <div class="mf-stat">
          <div class="mf-statrow"><div><div class="mf-statk">Sales</div><div class="mf-statv">${money2(c.sales)}</div></div><div><div class="mf-statk">Gross profit</div><div class="mf-statv" style="color:#8ef0b6">${money2(c.gp)}</div></div></div>
          <div class="mf-statrow"><div><div class="mf-statk">Expenses</div><div class="mf-statv">${money2(c.exp)}</div></div><div><div class="mf-statk">Cost of goods</div><div class="mf-statv">${money2(c.cogs)}</div></div></div>
-         <div class="mf-statnet"><div><div class="mf-statk">Net profit / ${per}</div><div class="mf-statk" style="text-transform:none;margin-top:2px">Margin ${c.sales?c.margin.toFixed(1)+'%':'—'}</div></div><div class="mf-netbig" style="color:${c.net>=0?'#8ef0b6':'#ffb3ad'}">${money2(c.net)}</div></div>
+         <div class="mf-statnet"><div><div class="mf-statk">Net profit / ${per}</div><div class="mf-statk" style="text-transform:none;margin-top:2px">Margin ${c.sales?c.margin.toFixed(1)+'%':'0%'}</div></div><div class="mf-netbig" style="color:${c.net>=0?'#8ef0b6':'#ffb3ad'}">${money2(c.net)}</div></div>
        </div>
        <div class="mf-body">
          <div class="mf-sec" style="margin-top:2px"><span>${isPhone?'Today’s sales':'Today’s sales'}</span></div>
@@ -1244,7 +1242,7 @@ function viewCashEntry(){
   return `${mfCashCSS()}<div class="mf-wrap">
    <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:8px">
      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-       <div><h1 class="hello" style="margin:0">Manual Finance Entry</h1><div class="sub" style="font-size:12px">Daily cash worksheet · enter sales daily, bills once</div></div>
+       <div><h1 class="hello" style="margin:0">Manual Finance Entry</h1><div class="sub" style="font-size:12px">Daily cash worksheet</div></div>
        <div style="display:flex;align-items:center;gap:8px">
          <button class="btn sec sm" onclick="mfShiftDate(-1)">‹ Prev</button>
          <input type="date" value="${mfDate}" onchange="mfNavDate(this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px">
@@ -1258,7 +1256,7 @@ function viewCashEntry(){
    </div>`;
 }
 /* ============================================================
-   Recurring Expenses — bill calendar + manager. Feeds Cash Entry + Finance.
+   Recurring Expenses - bill calendar + manager. Feeds Cash Entry + Finance.
    Occurrence records (data.manualFinance.payments) also reserve email-parser fields:
    source, sourceEmailId, provider, invoiceNo, billingPeriod, detectedAmount, detectedDueDate, confidence, status.
    ============================================================ */
@@ -1269,7 +1267,7 @@ function recLive(it){ return it&&it.active!==false&&!it.paused; }
 function recFreqGroup(f){ return (f==='weekly'||f==='biweekly')?'wk':(f==='monthly'?'mo':(f==='yearly'?'yr':'one')); }
 function recMonthlyEquiv(it){ if(!recLive(it))return 0; const a=Number(it.amount)||0; return it.frequency==='weekly'?a*52/12:it.frequency==='biweekly'?a*26/12:it.frequency==='monthly'?a:0; }
 function recFiltered(){ return (mfEnsure().recurring||[]).filter(it=> recFilter==='all'||it.book===recFilter); }
-function recStatusOf(it){ if(it.paused)return ['','Paused']; const nd=mfNextDue(it); if(!nd)return ['','—']; const o=mfOcc(it.id,nd); if(o&&o.status==='paid')return ['in','Paid']; const t=mfTodayStr(); if(nd<t)return ['out','Overdue']; if(nd===t)return ['low','Due today']; const days=Math.round((new Date(nd+'T12:00')-new Date(t+'T12:00'))/864e5); return days<=(Number(it.reminderDays)||3)?['low','Due soon']:['','Upcoming']; }
+function recStatusOf(it){ if(it.paused)return ['','Paused']; const nd=mfNextDue(it); if(!nd)return ['','-']; const o=mfOcc(it.id,nd); if(o&&o.status==='paid')return ['in','Paid']; const t=mfTodayStr(); if(nd<t)return ['out','Overdue']; if(nd===t)return ['low','Due today']; const days=Math.round((new Date(nd+'T12:00')-new Date(t+'T12:00'))/864e5); return days<=(Number(it.reminderDays)||3)?['low','Due soon']:['','Upcoming']; }
 function recLastPaid(it){ const mf=mfEnsure(); let last=null; for(const k in (mf.payments||{})){ if(k.indexOf(it.id+'|')!==0)continue; const o=mf.payments[k]; if(o&&o.status==='paid'&&o.paidDate&&(!last||o.paidDate>last))last=o.paidDate; } return last; }
 function recUpcoming(from,to){ const out=[]; recFiltered().forEach(it=>{ if(!recLive(it))return; mfDueDatesInRange(it,from,to).forEach(dd=>{ const o=mfOcc(it.id,dd); out.push({it,dd,paid:!!(o&&o.status==='paid'),skipped:!!(o&&o.status==='skipped'),amt:mfOccAmount(it,dd)}); }); }); out.sort((a,b)=>a.dd<b.dd?-1:1); return out; }
 function mfRecPause(id){ const it=mfEnsure().recurring.find(x=>x.id===id); if(it){ it.paused=!it.paused; save(); render(); toast(it.paused?'Paused':'Resumed'); } }
@@ -1277,7 +1275,7 @@ function recAddDefault(bk,nm,cat,fr){ const variable=/electric|phone|tax|gas|wat
 function recRow(it){ const sp=recStatusOf(it); const nd=mfNextDue(it); const lp=recLastPaid(it); const paidNow=nd&&mfOcc(it.id,nd)&&mfOcc(it.id,nd).status==='paid';
   return `<tr><td style="font-weight:600">${esc(it.name)}${it.amountType==='variable'?' <span class="pill" title="amount changes each period">variable</span>':''}</td>
     <td>${mfBookLabel(it.book)}</td><td class="right">${it.amount?money2(it.amount):'<span class="sub">set at bill</span>'}</td>
-    <td class="sub">${mfFreqLabel(it.frequency)}</td><td>${nd||'—'}</td><td class="sub">${lp||'—'}</td><td><span class="pill ${sp[0]}">${sp[1]}</span></td>
+    <td class="sub">${mfFreqLabel(it.frequency)}</td><td>${nd||'-'}</td><td class="sub">${lp||'-'}</td><td><span class="pill ${sp[0]}">${sp[1]}</span></td>
     <td class="right" style="white-space:nowrap">${(nd&&!paidNow&&!it.paused)?`<button class="btn sec sm" onclick="mfMarkPaid('${it.id}','${nd}')">Paid</button> `:''}<button class="btn sec sm" onclick="mfRecHistory('${it.id}')">History</button> <button class="btn sec sm" onclick="mfRecPause('${it.id}')">${it.paused?'Resume':'Pause'}</button> <button class="btn sec sm" onclick="mfRecModal('${it.id}')">Edit</button></td></tr>`; }
 function recSection(title,fn){ const items=recFiltered().filter(fn).sort((a,b)=>((mfNextDue(a)||'9999')<(mfNextDue(b)||'9999')?-1:1)); if(!items.length)return '';
   return `<div style="font-weight:800;margin:20px 0 8px">${title} <span class="sub" style="font-weight:400">${items.length}</span></div><div class="card"><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Expense</th><th>Cash</th><th class="right">Amount</th><th>Frequency</th><th>Next due</th><th>Last paid</th><th>Status</th><th></th></tr></thead><tbody>${items.map(recRow).join('')}</tbody></table></div></div></div>`; }
@@ -1289,7 +1287,7 @@ function recUpcomingCard(){ const t=mfTodayStr(); const now=new Date();
   return `<div class="card"><div class="hd"><b>📅 Upcoming bills</b><div class="seg">${seg.map(s=>`<button class="${recCalRange===s[0]?'on':''}" onclick="recCalRange='${s[0]}';render()">${s[1]}</button>`).join('')}</div></div><div class="bd">${body}</div></div>`; }
 function recDefaultsCard(){ const mf=mfEnsure(); const have=(nm,bk)=>(mf.recurring||[]).some(x=>x.book===bk&&(x.name||'').toLowerCase()===nm.toLowerCase()); const chips=[];
   ['general','phone'].forEach(bk=>{ (MF_DEFAULTS[bk]||[]).forEach(([nm,cat,fr])=>{ if(!have(nm,bk)) chips.push(`<button class="chip" onclick="recAddDefault('${bk}','${nm}','${cat}','${fr}')">${nm} <span class="sub">· ${bk==='phone'?'Phone':'General'}</span></button>`); }); });
-  if(!chips.length)return ''; return `<div style="font-weight:800;margin:20px 0 6px">Quick add</div><div class="sub" style="margin-bottom:8px">Common bills — tap to set the amount &amp; date, then activate.</div><div class="chips" style="margin:0">${chips.join('')}</div>`; }
+  if(!chips.length)return ''; return `<div style="font-weight:800;margin:20px 0 6px">Quick add</div><div class="sub" style="margin-bottom:8px">Common bills - tap to set the amount &amp; date, then activate.</div><div class="chips" style="margin:0">${chips.join('')}</div>`; }
 function viewRecurring(){
   const mf=mfEnsure(); const t=mfTodayStr(); const now=new Date();
   const mFrom=new Date(now.getFullYear(),now.getMonth(),1,12).toISOString().slice(0,10), mTo=new Date(now.getFullYear(),now.getMonth()+1,0,12).toISOString().slice(0,10);
@@ -1356,8 +1354,8 @@ function mfRecSave(id){ const name=val('rc_name'); if(!name){toast('Name require
 function mfRecDel(id){ if(!confirm('Delete this recurring expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=mf.recurring.filter(x=>x.id!==id); save(); closeModal(); render(); toast('Deleted'); }
 function mfRecHistory(id){ const mf=mfEnsure(); const it=mf.recurring.find(x=>x.id===id); if(!it){toast('Not found');return}
   const past=mfDueDatesInRange(it,mfAddDays(mfTodayStr(),-400),mfTodayStr()).reverse();
-  const rows=past.length?past.map(dd=>{ const o=mfOcc(it.id,dd); const st=o?(o.status==='paid'?'<span class="pill in">Paid</span>':'<span class="pill">Skipped</span>'):'<span class="pill out">Unpaid</span>'; return `<tr><td>${dd}</td><td class="right sub">${money2(o&&o.expected!=null?o.expected:it.amount)}</td><td class="right" style="font-weight:600">${o&&o.amount!=null?money2(o.amount):'—'}</td><td class="sub">${o&&o.paidDate?o.paidDate:'—'}</td><td>${st}</td><td class="sub">${o&&o.source?o.source:'—'}</td></tr>`; }).join(''):'<tr><td colspan="6" class="sub" style="padding:14px">No past occurrences.</td></tr>';
-  document.getElementById('mdl').innerHTML=`<div class="mh"><b>${esc(it.name)} — payment history</b><button class="x" onclick="closeModal()">×</button></div><div class="mb" style="max-height:70vh;overflow:auto"><div class="sub" style="margin-bottom:6px">${mfBookLabel(it.book)} · ${mfFreqLabel(it.frequency)} · ${it.amountType==='variable'?'variable':'fixed'} ${money2(it.amount)}</div><table><thead><tr><th>Due</th><th class="right">Expected</th><th class="right">Paid</th><th>Paid on</th><th>Status</th><th>Source</th></tr></thead><tbody>${rows}</tbody></table></div><div class="mf"><button class="btn sec" onclick="closeModal()">Close</button></div>`;showModal(); }
+  const rows=past.length?past.map(dd=>{ const o=mfOcc(it.id,dd); const st=o?(o.status==='paid'?'<span class="pill in">Paid</span>':'<span class="pill">Skipped</span>'):'<span class="pill out">Unpaid</span>'; return `<tr><td>${dd}</td><td class="right sub">${money2(o&&o.expected!=null?o.expected:it.amount)}</td><td class="right" style="font-weight:600">${o&&o.amount!=null?money2(o.amount):'-'}</td><td class="sub">${o&&o.paidDate?o.paidDate:'-'}</td><td>${st}</td><td class="sub">${o&&o.source?o.source:'-'}</td></tr>`; }).join(''):'<tr><td colspan="6" class="sub" style="padding:14px">No past occurrences.</td></tr>';
+  document.getElementById('mdl').innerHTML=`<div class="mh"><b>${esc(it.name)} - payment history</b><button class="x" onclick="closeModal()">×</button></div><div class="mb" style="max-height:70vh;overflow:auto"><div class="sub" style="margin-bottom:6px">${mfBookLabel(it.book)} · ${mfFreqLabel(it.frequency)} · ${it.amountType==='variable'?'variable':'fixed'} ${money2(it.amount)}</div><table><thead><tr><th>Due</th><th class="right">Expected</th><th class="right">Paid</th><th>Paid on</th><th>Status</th><th>Source</th></tr></thead><tbody>${rows}</tbody></table></div><div class="mf"><button class="btn sec" onclick="closeModal()">Close</button></div>`;showModal(); }
 function mfDefGpModal(){document.getElementById('mdl').innerHTML=`<div class="mh"><b>Default gross-profit %</b><button class="x" onclick="closeModal()">×</button></div>
    <div class="mb"><div class="sub" style="margin-bottom:8px">Used to estimate gross profit &amp; COGS for any sale entered without its own %.</div>
      <input id="mf_defgp" type="number" step="0.1" value="${mfDefGp()}" style="width:120px;padding:9px 12px;border:1px solid var(--line);border-radius:10px"> %
@@ -1393,7 +1391,7 @@ function mfSaveExp(id){const amt=Number(val('mf_e_amt'));if(!amt){toast('Amount 
 function mfDelExp(id){if(!confirm('Delete this expense?'))return;const mf=mfEnsure();mf.expenses=mf.expenses.filter(e=>e.id!==id);save();closeModal();render();toast('Deleted');}
 
 /* ============================================================
-   FINANCE COMPARISON — Automated (POS) vs Manual (owner) for the selected period.
+   FINANCE COMPARISON - Automated (POS) vs Manual (owner) for the selected period.
    ============================================================ */
 function viewFinanceCompare(){
   const a=salesAgg(salesRangeKey); const autoCogs=finCogs(salesRangeKey); const autoGP=a.rev-autoCogs;
@@ -1405,7 +1403,7 @@ function viewFinanceCompare(){
   const salesGap=pct(a.rev,m.salesTot);
   const status = m.salesTot===0 ? ['low','No manual data','Enter manual sales to compare.']
     : salesGap<3 ? ['in','Aligned','Automated and manual agree within 3%.']
-    : salesGap<10 ? ['low','Minor variance','Within 10% — review the larger days.']
+    : salesGap<10 ? ['low','Minor variance','Within 10% - review the larger days.']
     : ['out','Needs review','Automated and manual differ by more than 10%.'];
   const missing=[];
   if(!hasCost) missing.push('Product costs incomplete → automated COGS/gross profit is understated.');
@@ -1424,7 +1422,7 @@ function viewFinanceCompare(){
      ${row('Operating expenses',autoExp,m.expTot)}
      ${row('Net profit',autoNet,m.estNet)}
    </tbody></table></div></div>
-   <div class="card" style="margin-top:16px"><div class="hd"><b>Missing data / to reconcile</b></div><div class="bd">${missing.length?missing.map(x=>`<div style="display:flex;gap:8px;padding:6px 0"><span style="color:#d97706">•</span><span>${esc(x)}</span></div>`).join(''):'<div class="sub" style="padding:8px 0">Nothing outstanding — both systems have data for this period. ✓</div>'}
+   <div class="card" style="margin-top:16px"><div class="hd"><b>Missing data / to reconcile</b></div><div class="bd">${missing.length?missing.map(x=>`<div style="display:flex;gap:8px;padding:6px 0"><span style="color:#d97706">•</span><span>${esc(x)}</span></div>`).join(''):'<div class="sub" style="padding:8px 0">Nothing outstanding - both systems have data for this period. ✓</div>'}
      <div class="sub" style="font-size:12px;margin-top:8px">As product costs and integrations complete, the automated column becomes the single source of truth and the manual system can be retired.</div>
    </div></div>`;
 }
@@ -1442,7 +1440,7 @@ function financeOverview(){
   else { const _st=new Date();_st.setHours(0,0,0,0);(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;if(new Date(e.timestamp)<_st)return;const p=catById[e.productId];revToday+=(e.rev!=null)?e.rev:Math.abs(e.qtyChange)*(p?(effPrice(p)||0):0);}); }
   const _buys=invPurchases(days);const cashNet=a.rev-(ex.total+_buys);
   const payables=(S.purchaseList||[]).filter(o=>o.status!=='done').reduce((s,o)=>{const p=catById[o.productId];return s+((p&&p.costPrice)||0)*(o.qty||0);},0);
-  const topCat=rows[0]?rows[0].k:'—';
+  const topCat=rows[0]?rows[0].k:'-';
   return `<div class="kpis">
    <div class="kpi"><div class="t">Revenue today</div><div class="v">${money(revToday)}</div></div>
    <div class="kpi"><div class="t">Net profit · ${days}d</div><div class="v" style="color:${net>=0?'#4f8f6a':'#b56a6a'}">${money(net)}</div><div class="s">${nm.toFixed(0)}% net margin</div></div>
@@ -1489,7 +1487,7 @@ function financeExpenses(){
    </div>
    <div style="display:flex;justify-content:flex-end;margin:12px 0"><button class="btn" onclick="editExpense()">+ Add expense</button></div>
    <div class="card"><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Expense</th><th>Category</th><th>Type</th><th>Frequency</th><th class="right">Amount</th><th></th></tr></thead><tbody>
-    ${X.length?X.map(x=>`<tr><td style="font-weight:600">${esc(x.name)}</td><td class="sub">${esc(x.category||'—')}</td><td>${x.type==='fixed'?'<span class="pill over">Fixed</span>':'<span class="pill low">Variable</span>'}</td><td class="sub">${x.recurring?'Monthly':(x.date?new Date(x.date).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'One-time')}</td><td class="right" style="font-weight:600">${money(x.amount||0)}${x.recurring?'<span class="sub" style="font-weight:400">/mo</span>':''}</td><td class="right"><button class="btn sec sm" onclick="editExpense('${x.id}')">Edit</button></td></tr>`).join(''):`<tr><td colspan="6" class="sub" style="padding:26px;text-align:center">No expenses yet. Add rent, utilities (Con Ed), payroll, insurance, POS/software fees, maintenance, repairs, card fees…</td></tr>`}
+    ${X.length?X.map(x=>`<tr><td style="font-weight:600">${esc(x.name)}</td><td class="sub">${esc(x.category||'-')}</td><td>${x.type==='fixed'?'<span class="pill over">Fixed</span>':'<span class="pill low">Variable</span>'}</td><td class="sub">${x.recurring?'Monthly':(x.date?new Date(x.date).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'One-time')}</td><td class="right" style="font-weight:600">${money(x.amount||0)}${x.recurring?'<span class="sub" style="font-weight:400">/mo</span>':''}</td><td class="right"><button class="btn sec sm" onclick="editExpense('${x.id}')">Edit</button></td></tr>`).join(''):`<tr><td colspan="6" class="sub" style="padding:26px;text-align:center">No expenses yet. Add rent, utilities (Con Ed), payroll, insurance, POS/software fees, maintenance, repairs, card fees…</td></tr>`}
    </tbody></table></div></div></div>`;
 }
 function financeTax(){const a=salesAgg(salesRangeKey);
@@ -1497,7 +1495,7 @@ function financeTax(){const a=salesAgg(salesRangeKey);
     <div class="kpi"><div class="t">Sales tax collected</div><div class="v">${money(a.tax)}</div><div class="s">${rangeLabel(salesRangeKey)} · Clover</div></div>
     <div class="kpi"><div class="t">Taxed revenue (est.)</div><div class="v">${money(a.rev)}</div></div>
    </div>
-   <div class="card"><div class="bd sub">Clover records tax per order, captured on each sale and totaled here. NRS per-item tax isn't in its CSV — the NRS daily email has a "Taxes Collected" summary you can enter manually later. A sales-tax filing export (by period) will live on this page.</div></div>`;
+   <div class="card"><div class="bd sub">Clover records tax per order, captured on each sale and totaled here. NRS per-item tax isn't in its CSV - the NRS daily email has a "Taxes Collected" summary you can enter manually later. A sales-tax filing export (by period) will live on this page.</div></div>`;
 }
 function revBetween(fromDaysAgo,toDaysAgo){const now=Date.now();const lo=now-fromDaysAgo*864e5,hi=now-toDaysAgo*864e5;const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let rev=0;(S.events||[]).forEach(e=>{if(e.type!=='Stock decrease')return;const t=new Date(e.timestamp).getTime();if(t<lo||t>=hi)return;const p=byId[e.productId];rev+=(e.rev!=null)?e.rev:Math.abs(e.qtyChange)*(p?(effPrice(p)||0):0);});return rev;}
 function invPurchases(days){if(typeof days==='string')days=presetDays(days);const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);let c=0;(S.events||[]).forEach(e=>{if(e.qtyChange<=0)return;const t=new Date(e.timestamp).getTime();if(t<Date.now()-days*864e5)return;const p=byId[e.productId];if(p)c+=e.qtyChange*(p.costPrice||0);});return c;}
@@ -1510,7 +1508,7 @@ function financeRevenue(){
     <div class="kpi"><div class="t">Net of tax</div><div class="v">${money(a.rev-a.tax)}</div></div>
     <div class="kpi"><div class="t">Avg / day</div><div class="v">${money(a.rev/days)}</div></div>
     <div class="kpi"><div class="t">Items sold</div><div class="v">${a.units.toLocaleString()}</div></div>
-    <div class="kpi"><div class="t">vs previous ${days}d</div><div class="v" style="color:${growth==null?'#161a26':growth>=0?'#4f8f6a':'#b56a6a'}">${growth==null?'—':(growth>=0?'+':'')+growth.toFixed(0)+'%'}</div></div>
+    <div class="kpi"><div class="t">vs previous ${days}d</div><div class="v" style="color:${growth==null?'#161a26':growth>=0?'#4f8f6a':'#b56a6a'}">${growth==null?'-':(growth>=0?'+':'')+growth.toFixed(0)+'%'}</div></div>
    </div>
    <div class="card"><div class="hd"><b>Revenue trend</b></div><div class="bd">${a.rev>0?dayBars(a.byDay,days):'<div class="sub" style="padding:26px;text-align:center">No sales in this period.</div>'}</div></div>
    <div class="grid2" style="margin-top:16px">
@@ -1540,7 +1538,7 @@ function financeCashflow(){
        <div class="drow" style="font-weight:700"><span>Total out</span><b style="color:#b56a6a">${money(outflow)}</b></div>
      </div></div>
    </div>
-   <div class="card" style="margin-top:16px"><div class="bd sub">Derived from sales, stock receipts (qty added × cost) and logged expenses — not a bank reconciliation. Connect Clover payouts or a bank feed later for exact cash on hand.</div></div>`;
+   <div class="card" style="margin-top:16px"><div class="bd sub">Derived from sales, stock receipts (qty added × cost) and logged expenses - not a bank reconciliation. Connect Clover payouts or a bank feed later for exact cash on hand.</div></div>`;
 }
 function financePayables(){
   const po=(S.purchaseList||[]).filter(o=>o.status!=='done');const byId={};(S.products||[]).forEach(p=>byId[p.id]=p);
@@ -1559,7 +1557,7 @@ function financePayables(){
        ${po.length?po.map(o=>{const p=byId[o.productId];const cost=((p&&p.costPrice)||0)*(o.qty||0);return `<tr><td style="font-weight:600">${esc(o.name)}<div class="sub" style="font-size:11px">${esc(o.supplier||(p&&p.supplier)||'')}</div></td><td class="right">${o.qty}</td><td class="right">${money(cost)}</td><td class="right"><button class="btn sec sm" onclick="poDone('${o.id}')">Mark paid</button></td></tr>`}).join(''):`<tr><td colspan="4" class="sub" style="padding:20px">Empty.</td></tr>`}
      </tbody></table></div></div>
    </div>
-   ${bills.length?`<div class="card" style="margin-top:16px"><div class="hd"><b>Recurring bills (monthly)</b></div><div class="bd"><table><thead><tr><th>Bill</th><th>Category</th><th class="right">Amount</th></tr></thead><tbody>${bills.map(x=>`<tr><td style="font-weight:600">${esc(x.name)}</td><td class="sub">${esc(x.category||'—')}</td><td class="right">${money(x.amount||0)}/mo</td></tr>`).join('')}</tbody></table></div></div>`:''}`;
+   ${bills.length?`<div class="card" style="margin-top:16px"><div class="hd"><b>Recurring bills (monthly)</b></div><div class="bd"><table><thead><tr><th>Bill</th><th>Category</th><th class="right">Amount</th></tr></thead><tbody>${bills.map(x=>`<tr><td style="font-weight:600">${esc(x.name)}</td><td class="sub">${esc(x.category||'-')}</td><td class="right">${money(x.amount||0)}/mo</td></tr>`).join('')}</tbody></table></div></div>`:''}`;
 }
 function exportPnl(){const days=salesRangeKey;const a=salesAgg(days);const cogs=finCogs(days);const gp=a.rev-cogs;const ex=expensesForPeriod(days);const net=gp-ex.total;
   const rows=[['Line','Amount'].join(','),['Revenue',a.rev.toFixed(2)].join(','),['Cost of goods sold',(-cogs).toFixed(2)].join(','),['Gross profit',gp.toFixed(2)].join(','),['Fixed costs',(-ex.fixed).toFixed(2)].join(','),['Variable costs',(-ex.variable).toFixed(2)].join(','),['Net profit',net.toFixed(2)].join(','),['Sales tax collected',a.tax.toFixed(2)].join(',')];
@@ -1609,7 +1607,7 @@ function customersDirectory(){
    <div class="kpi"><div class="t">VIP / Gold</div><div class="v">${(tierc.VIP||0)+(tierc.Gold||0)}</div></div>
   </div>
   <div class="card"><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th class="right">Points</th><th>Tier</th><th>Last purchase</th><th>Opt-in</th></tr></thead><tbody>
-    ${list.length?list.map(c=>{const lp=c.lastPurchase||c.lastVisit;return `<tr><td style="font-weight:600">${esc(c.name||'—')}</td><td class="sub">${esc(c.phone||'—')}</td><td class="sub">${esc(c.email||'—')}</td><td class="right">${(c.points||0).toLocaleString()}</td><td>${tierBadge(c.tier)}</td><td class="sub">${lp?new Date(lp).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'—'}</td><td class="sub">${c.optIn||c.smsOptIn||c.emailOptIn?'Yes':'—'}</td></tr>`}).join(''):`<tr><td colspan="7" class="sub" style="padding:24px;text-align:center">No customers yet. Sync from Clover to import them.</td></tr>`}
+    ${list.length?list.map(c=>{const lp=c.lastPurchase||c.lastVisit;return `<tr><td style="font-weight:600">${esc(c.name||'-')}</td><td class="sub">${esc(c.phone||'-')}</td><td class="sub">${esc(c.email||'-')}</td><td class="right">${(c.points||0).toLocaleString()}</td><td>${tierBadge(c.tier)}</td><td class="sub">${lp?new Date(lp).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'-'}</td><td class="sub">${c.optIn||c.smsOptIn||c.emailOptIn?'Yes':'-'}</td></tr>`}).join(''):`<tr><td colspan="7" class="sub" style="padding:24px;text-align:center">No customers yet. Sync from Clover to import them.</td></tr>`}
   </tbody></table></div>${C.length>200?`<div class="sub" style="padding:10px 4px">Showing 200 of ${C.length.toLocaleString()}.</div>`:''}</div></div>`;
 }
 function customersLoyalty(){
@@ -1635,7 +1633,7 @@ function customersLoyalty(){
        <p class="sub" style="margin-top:10px">Tiers: Member · Gold · VIP. Points accrue on each recorded sale and redeem in-store. Rates are set in the current app's Marketing settings.</p>
      </div></div>
      <div class="card"><div class="hd"><b>Top members</b></div><div class="bd"><table><thead><tr><th>Name</th><th>Tier</th><th class="right">Points</th><th class="right">Worth</th></tr></thead><tbody>
-       ${(top.length&&pts>0)?top.map(c=>`<tr><td style="font-weight:600">${esc(c.name||'—')}</td><td>${tierBadge(c.tier)}</td><td class="right">${(c.points||0).toLocaleString()}</td><td class="right sub">${money(rewardPts?(c.points||0)/rewardPts*rewardVal:0)}</td></tr>`).join(''):`<tr><td colspan="4" class="sub" style="padding:22px;text-align:center">No points yet. Points accrue as sales are recorded to customers (loyalty runs in the current app).</td></tr>`}
+       ${(top.length&&pts>0)?top.map(c=>`<tr><td style="font-weight:600">${esc(c.name||'-')}</td><td>${tierBadge(c.tier)}</td><td class="right">${(c.points||0).toLocaleString()}</td><td class="right sub">${money(rewardPts?(c.points||0)/rewardPts*rewardVal:0)}</td></tr>`).join(''):`<tr><td colspan="4" class="sub" style="padding:22px;text-align:center">No points yet. Points accrue as sales are recorded to customers (loyalty runs in the current app).</td></tr>`}
      </tbody></table></div></div>
    </div>`;
 }
@@ -1652,7 +1650,7 @@ function opsRequests(){
   return `<div class="kpis"><div class="kpi"><div class="t">Open requests</div><div class="v">${openR.length}</div></div><div class="kpi"><div class="t">Total requests</div><div class="v">${reqs.length}</div></div><div class="kpi"><div class="t">Unique items</div><div class="v">${Object.keys(rank).length}</div></div></div>
    <div class="grid2">
      <div class="card"><div class="hd"><b>Customer requests</b></div><div class="bd"><table><thead><tr><th>Product</th><th>Contact</th><th>When</th><th>Status</th><th></th></tr></thead><tbody>
-       ${reqs.length?reqs.slice(0,40).map(r=>`<tr><td style="font-weight:600">${esc(r.name||r.product||'—')}<div class="sub" style="font-size:11px">${esc(r.brand||'')}</div></td><td class="sub">${esc(r.contact||r.phone||r.email||'—')}</td><td class="sub" style="white-space:nowrap">${r.date?new Date(r.date).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'—'}</td><td>${r.status==='Open'?'<span class="pill low">Open</span>':'<span class="pill in">Done</span>'}</td><td class="right">${r.status==='Open'?`<button class="btn sec sm" onclick="reqDone('${r.id}')">Mark done</button>`:''}</td></tr>`).join(''):`<tr><td colspan="5" class="sub" style="padding:20px">No requests yet. The kiosk "Request this product" form feeds this.</td></tr>`}
+       ${reqs.length?reqs.slice(0,40).map(r=>`<tr><td style="font-weight:600">${esc(r.name||r.product||'-')}<div class="sub" style="font-size:11px">${esc(r.brand||'')}</div></td><td class="sub">${esc(r.contact||r.phone||r.email||'-')}</td><td class="sub" style="white-space:nowrap">${r.date?new Date(r.date).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'-'}</td><td>${r.status==='Open'?'<span class="pill low">Open</span>':'<span class="pill in">Done</span>'}</td><td class="right">${r.status==='Open'?`<button class="btn sec sm" onclick="reqDone('${r.id}')">Mark done</button>`:''}</td></tr>`).join(''):`<tr><td colspan="5" class="sub" style="padding:20px">No requests yet. The kiosk "Request this product" form feeds this.</td></tr>`}
      </tbody></table></div></div>
      <div class="card"><div class="hd"><b>Most requested</b><span class="sub">consider stocking</span></div><div class="bd">${top.length?barList(top,v=>v+'×'):'<div class="sub" style="padding:16px">No requests yet.</div>'}</div></div>
    </div>`;
@@ -1667,8 +1665,8 @@ function opsDemand(){
   const failTot=Object.values(fail).reduce((a,b)=>a+b,0);
   return `<div class="kpis"><div class="kpi"><div class="t">Searches logged</div><div class="v">${logs.length.toLocaleString()}</div></div><div class="kpi"><div class="t">Failed searches</div><div class="v" style="color:#b56a6a">${failTot.toLocaleString()}</div></div><div class="kpi"><div class="t">Unique terms</div><div class="v">${Object.keys(all).length.toLocaleString()}</div></div></div>
    <div class="grid2">
-     <div class="card"><div class="hd"><b>Top searches</b></div><div class="bd">${topS.length?barList(topS,v=>v+'×'):'<div class="sub" style="padding:16px">No searches logged yet — the kiosk search feeds this.</div>'}</div></div>
-     <div class="card"><div class="hd"><b>Failed searches</b><span class="sub">stock these</span></div><div class="bd">${failS.length?barList(failS,v=>v+'×'):'<div class="sub" style="padding:16px">No failed searches — good catalog coverage.</div>'}</div></div>
+     <div class="card"><div class="hd"><b>Top searches</b></div><div class="bd">${topS.length?barList(topS,v=>v+'×'):'<div class="sub" style="padding:16px">No searches logged yet - the kiosk search feeds this.</div>'}</div></div>
+     <div class="card"><div class="hd"><b>Failed searches</b><span class="sub">stock these</span></div><div class="bd">${failS.length?barList(failS,v=>v+'×'):'<div class="sub" style="padding:16px">No failed searches - good catalog coverage.</div>'}</div></div>
    </div>
    <div class="card" style="margin-top:16px"><div class="hd"><b>Top selling products · 30 days</b></div><div class="bd"><div style="overflow:auto"><table><thead><tr><th>Product</th><th class="right">Units</th><th>Stock</th></tr></thead><tbody>
      ${top.length?top.map(x=>`<tr><td><a onclick="openDetail('${x.p.id}')" style="cursor:pointer;color:inherit;display:inline-flex;align-items:center">${thumb(x.p,30)}<span style="font-weight:600">${esc(x.p.name)}</span></a></td><td class="right">${x.u}</td><td>${invStatus(invClass(x.p))}</td></tr>`).join(''):`<tr><td colspan="3" class="sub" style="padding:18px">No sales in the last 30 days.</td></tr>`}
@@ -1679,7 +1677,7 @@ function opsPurchasing(){
   const total=po.reduce((s,o)=>s+(((byId[o.productId]&&byId[o.productId].costPrice)||0)*(o.qty||0)),0);
   return `<div class="kpis"><div class="kpi"><div class="t">Open orders</div><div class="v">${po.length}</div></div><div class="kpi"><div class="t">Est. cost</div><div class="v">${money(total)}</div></div></div>
    <div class="card"><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Product</th><th class="right">Qty</th><th>Supplier</th><th class="right">Est. cost</th><th></th></tr></thead><tbody>
-     ${po.length?po.map(o=>{const p=byId[o.productId];const c=((p&&p.costPrice)||0)*(o.qty||0);return `<tr><td style="font-weight:600">${esc(o.name)}</td><td class="right">${o.qty}</td><td class="sub">${esc(o.supplier||(p&&p.supplier)||'—')}</td><td class="right">${money(c)}</td><td class="right"><button class="btn sec sm" onclick="poDone('${o.id}')">Ordered</button></td></tr>`}).join(''):`<tr><td colspan="5" class="sub" style="padding:20px">Empty. Add items from a product's "Add to purchase list".</td></tr>`}
+     ${po.length?po.map(o=>{const p=byId[o.productId];const c=((p&&p.costPrice)||0)*(o.qty||0);return `<tr><td style="font-weight:600">${esc(o.name)}</td><td class="right">${o.qty}</td><td class="sub">${esc(o.supplier||(p&&p.supplier)||'-')}</td><td class="right">${money(c)}</td><td class="right"><button class="btn sec sm" onclick="poDone('${o.id}')">Ordered</button></td></tr>`}).join(''):`<tr><td colspan="5" class="sub" style="padding:20px">Empty. Add items from a product's "Add to purchase list".</td></tr>`}
    </tbody></table></div></div></div>`;
 }
 function reqDone(id){const r=(S.requests||[]).find(x=>x.id===id);if(r){r.status='Fulfilled';save();render();toast('Marked done');}}
@@ -1689,26 +1687,26 @@ const MK_CH=[['facebook','Facebook Page'],['instagram','Instagram'],['google','G
 function mkChToggle(k){const i=mkChannels.indexOf(k);if(i<0)mkChannels.push(k);else mkChannels.splice(i,1);render();}
 async function mkGen(mode){toast('Generating…');const p=(S.products||[]).find(x=>x.id===mkProduct);const subject=p?p.name:(mkTheme||"this week's deals");let brief=`Promote ${subject} as a ${mkFormat} social post for Family Bazar, a Brooklyn variety/dollar store. Tone: ${mkTone}.`;if(mode==='translate')brief+=' Write the caption in Spanish.';const channel=mode==='shorten'?'sms':'email';
   try{const r=await fetch('/api/ai/compose',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({channel,brief})});const d=await r.json();if(d.error)throw new Error(d.error);mkDraft=(d.text||'').replace(/\{name\}/g,'friends').trim();render();}catch(e){toast('AI failed: '+(e.message||e));}}
-function mkPublish(){if(!mkChannels.length){toast('Pick at least one channel');return}if(!mkDraft.trim()){toast('Generate or write a caption first');return}if(mkChannels.includes('sms')){mkSendModal();return;}toast(mkChannels.length+' social channel(s) are planned connectors — your content is drafted and ready to paste');}
+function mkPublish(){if(!mkChannels.length){toast('Pick at least one channel');return}if(!mkDraft.trim()){toast('Generate or write a caption first');return}if(mkChannels.includes('sms')){mkSendModal();return;}toast(mkChannels.length+' social channel(s) are planned connectors - your content is drafted and ready to paste');}
 function mkAudList(kind){let C=(S.customers||[]);const now=Date.now();
   if(kind==='vip')C=C.filter(c=>c.tier==='VIP');
   else if(kind==='gold')C=C.filter(c=>c.tier==='Gold'||c.tier==='VIP');
   else if(kind==='lapsed')C=C.filter(c=>{const t=c.lastPurchase?new Date(c.lastPurchase).getTime():(c.lastVisit?new Date(c.lastVisit).getTime():0);return !t||(now-t>60*864e5);});
   return C;}
 function mkCounts(){const list=mkAudList(val('mk_aud'));const s=list.filter(c=>c.phone).length,e=list.filter(c=>c.email).length;const el=document.getElementById('mk_counts');if(el)el.innerHTML=`SMS <b style="color:#161a26">${s}</b> · Email <b style="color:#161a26">${e}</b>`;}
-function mkDefName(){const p=(S.products||[]).find(x=>x.id===mkProduct);return (p?p.name:(mkTheme||'Campaign'))+' — '+new Date().toLocaleDateString();}
+function mkDefName(){const p=(S.products||[]).find(x=>x.id===mkProduct);return (p?p.name:(mkTheme||'Campaign'))+' - '+new Date().toLocaleDateString();}
 function mkRecordCampaign(status,results,chans,name){S.campaigns=S.campaigns||[];S.campaigns.unshift({id:uid('cmp'),name:name||mkDefName(),channels:(chans&&chans.length)?chans:['SMS','Email'],when:nowIso(),results:results||'',status:status,message:mkDraft});save();}
 function mkSaveDraft(){const chans=[chk('mk_sms')&&'SMS',chk('mk_email')&&'Email'].filter(Boolean);mkRecordCampaign('draft','Saved as draft',chans,val('mk_name'));closeModal();render();toast('Campaign saved as draft');}
-function mkSample(){const p=(S.products||[]).find(x=>x.id===mkProduct);const what=p?p.name:(mkTheme||'this week’s deals');mkDraft='This week at Family Bazar: '+what+' and more at everyday low prices. Come by your neighborhood Brooklyn store — we’d love to see you. Reply STOP to opt out.';render();}
+function mkSample(){const p=(S.products||[]).find(x=>x.id===mkProduct);const what=p?p.name:(mkTheme||'this week’s deals');mkDraft='This week at Family Bazar: '+what+' and more at everyday low prices. Come by your neighborhood Brooklyn store - we’d love to see you. Reply STOP to opt out.';render();}
 function mkSendModal(){const kinds=[['all','All customers'],['gold','Gold + VIP'],['vip','VIP only'],['lapsed','Lapsed (60+ days)']];
   document.getElementById('mdl').innerHTML=`<div class="mh"><b>Send SMS + Email campaign</b><button class="x" onclick="closeModal()">×</button></div>
    <div class="mb"><div class="fg">
      <div class="fld full"><label>Campaign name</label><input id="mk_name" value="${esc(mkDefName())}"></div>
      <div class="fld"><label>Audience</label><select id="mk_aud" onchange="mkCounts()">${kinds.map(k=>`<option value="${k[0]}">${k[1]}</option>`).join('')}</select></div>
-     <div class="fld"><label>Recipients</label><div id="mk_counts" class="sub" style="padding-top:9px">—</div></div>
+     <div class="fld"><label>Recipients</label><div id="mk_counts" class="sub" style="padding-top:9px">-</div></div>
      <div class="fld"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="mk_sms" checked style="width:auto"> Send SMS</label></div>
      <div class="fld"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="mk_email" checked style="width:auto"> Send Email</label></div>
-     <div class="fld full"><label>Email subject</label><input id="mk_subj" value="Family Bazar — this week"></div>
+     <div class="fld full"><label>Email subject</label><input id="mk_subj" value="Family Bazar - this week"></div>
      <div class="fld full"><label>Message</label><textarea rows="3" readonly style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:13.5px;background:#f7f8fb">${esc(mkDraft)}</textarea></div>
      <div class="fld"><label>Test to phone</label><input id="mk_tphone" placeholder="+1..."></div>
      <div class="fld"><label>Test to email</label><input id="mk_temail" placeholder="you@email.com"></div>
@@ -1725,16 +1723,16 @@ async function mkSend(){const name=val('mk_name');const sms=chk('mk_sms'),email=
   if(!msg){toast('Add a message in the studio first');return}if(!sms&&!email){toast('Pick SMS or Email');return}
   const list=mkAudList(val('mk_aud'));const smsR=list.filter(c=>c.phone),emR=list.filter(c=>c.email);
   const total=(sms?smsR.length:0)+(email?emR.length:0);
-  if(!total){if(confirm('No customers with a phone/email match this audience yet, so nothing can send.\n\nSave it as a Draft campaign instead?')){mkRecordCampaign('draft','No recipients — draft',chans,name);closeModal();render();toast('Saved as draft');}return;}
+  if(!total){if(confirm('No customers with a phone/email match this audience yet, so nothing can send.\n\nSave it as a Draft campaign instead?')){mkRecordCampaign('draft','No recipients - draft',chans,name);closeModal();render();toast('Saved as draft');}return;}
   if(!confirm('Send this campaign now?\n'+[sms?'SMS to '+smsR.length:'',email?'Email to '+emR.length:''].filter(Boolean).join(' · ')))return;
   toast('Sending…');let sent=0,failed=0,err='';
   try{
     if(sms&&smsR.length){const r=await fetch('/api/marketing/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'sms',recipients:smsR,message:msg})});const d=await r.json();sent+=d.sent||0;failed+=d.failed||0;if(d.errors&&d.errors.length)err=d.errors[0];}
     if(email&&emR.length){const r=await fetch('/api/marketing/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'email',recipients:emR,message:msg,subject:subj})});const d=await r.json();sent+=d.sent||0;failed+=d.failed||0;if(!err&&d.errors&&d.errors.length)err=d.errors[0];}
   }catch(e){err=e.message||String(e);}
-  const status=sent>0?'sent':'draft';const results=sent>0?(sent+' sent'+(failed?', '+failed+' failed':'')):('Not sent'+(err?' — '+err:' — check Twilio/SendGrid keys'));
+  const status=sent>0?'sent':'draft';const results=sent>0?(sent+' sent'+(failed?', '+failed+' failed':'')):('Not sent'+(err?' - '+err:' - check Twilio/SendGrid keys'));
   mkRecordCampaign(status,results,chans,name);closeModal();render();
-  toast(sent>0?('Campaign sent to '+sent):('Saved as draft — '+(err||'connect Twilio/SendGrid in Integrations')));}
+  toast(sent>0?('Campaign sent to '+sent):('Saved as draft - '+(err||'connect Twilio/SendGrid in Integrations')));}
 function viewMarketing(){
   const p=(S.products||[]).find(x=>x.id===mkProduct);const prods=(S.products||[]).slice(0,300);
   const themes=['New arrivals','Clearance','Weekend deal'];const fmt=[['image','Image post'],['video','Video'],['story','Story']];const tones=['Friendly','Deal-focused','Bilingual'];
@@ -1748,7 +1746,7 @@ function viewMarketing(){
         </div>
         <div class="sub" style="font-weight:700;margin-bottom:6px">2 · Format</div>
         <div class="seg" style="margin-bottom:14px">${fmt.map(f=>`<button class="${mkFormat===f[0]?'on':''}" onclick="mkFormat='${f[0]}';render()">${f[1]}</button>`).join('')}</div>
-        <div class="sub" style="font-weight:700;margin-bottom:6px">3 · Draft — edit anything</div>
+        <div class="sub" style="font-weight:700;margin-bottom:6px">3 · Draft - edit anything</div>
         <div style="display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:start">
           <div class="thumb" style="width:120px;height:120px;border-radius:12px;font-size:11px">${p&&p.image?`<img src="${esc(p.image)}" style="width:100%;height:100%;object-fit:contain;border-radius:12px">`:'visual'}</div>
           <div>
@@ -1767,7 +1765,7 @@ function viewMarketing(){
      </div>
    </div>
    <div class="card" style="margin-top:16px"><div class="hd"><b>Campaigns</b><button class="btn sec sm" onclick="mkSendModal()">+ New campaign</button></div><div class="bd"><div style="overflow:auto"><table><thead><tr><th>Campaign</th><th>Channels</th><th>When</th><th class="right">Results</th><th>Status</th></tr></thead><tbody>
-     ${(S.campaigns&&S.campaigns.length)?S.campaigns.slice(0,20).map(c=>`<tr><td style="font-weight:600">${esc(c.name||'—')}</td><td class="sub">${esc((c.channels||[]).join(', '))}</td><td class="sub">${c.when?new Date(c.when).toLocaleDateString():'—'}</td><td class="right sub">${esc(c.results||'—')}</td><td>${c.status==='sent'?'<span class="pill in">Sent</span>':'<span class="pill low">Draft</span>'}</td></tr>`).join(''):`<tr><td colspan="5" class="sub" style="padding:22px;text-align:center">No campaigns yet. Draft content above, or run an SMS / Email campaign in the current app.</td></tr>`}
+     ${(S.campaigns&&S.campaigns.length)?S.campaigns.slice(0,20).map(c=>`<tr><td style="font-weight:600">${esc(c.name||'-')}</td><td class="sub">${esc((c.channels||[]).join(', '))}</td><td class="sub">${c.when?new Date(c.when).toLocaleDateString():'-'}</td><td class="right sub">${esc(c.results||'-')}</td><td>${c.status==='sent'?'<span class="pill in">Sent</span>':'<span class="pill low">Draft</span>'}</td></tr>`).join(''):`<tr><td colspan="5" class="sub" style="padding:22px;text-align:center">No campaigns yet. Draft content above, or run an SMS / Email campaign in the current app.</td></tr>`}
    </tbody></table></div></div></div>`;
 }
 let chSearch='', chSel=[], chCat='', chStat='';
@@ -1775,23 +1773,23 @@ const PUBCH=[['websiteEnabled','Website'],['google','Google'],['amazon','Amazon'
 function blockedCh(p,flag){if(flag==='websiteEnabled')return false;return !p.image||!p.brand;}
 function chToggle(id,flag){const p=(S.products||[]).find(x=>x.id===id);if(!p)return;p[flag]=!p[flag];p.lastUpdated=nowIso();save();render();}
 function chSelToggle(id){const i=chSel.indexOf(id);if(i<0)chSel.push(id);else chSel.splice(i,1);render();}
-function bulkPublish(){if(!chSel.length){toast('Select products first');return}chSel.forEach(id=>{const p=(S.products||[]).find(x=>x.id===id);if(p)p.websiteEnabled=true;});const n=chSel.length;chSel=[];save();render();toast('Flagged '+n+' for website — hit Publish flagged to push live');}
+function bulkPublish(){if(!chSel.length){toast('Select products first');return}chSel.forEach(id=>{const p=(S.products||[]).find(x=>x.id===id);if(p)p.websiteEnabled=true;});const n=chSel.length;chSel=[];save();render();toast('Flagged '+n+' for website - hit Publish flagged to push live');}
 function pubCell(p,flag){const on=!!p[flag];const st=on?(blockedCh(p,flag)?'fix':'on'):'off';const map={on:['#eef6f0','#4f8f6a','ON'],off:['#f2f3f5','#9aa1ad','OFF'],fix:['#fbf4e6','#a97e33','FIX']};const c=map[st];
   const cp=(p.channelPrices||{});const override=cp[flag]!=null;const eff=override?cp[flag]:(effPrice(p)||0);
-  const price=on?`<span style="font-size:10.5px;margin-top:2px;color:${override?'#2447d6':'#aab0bb'};font-weight:${override?'700':'400'}">${money2(eff)}</span>`:'<span style="font-size:10.5px;margin-top:2px;color:#d3d7de">—</span>';
+  const price=on?`<span style="font-size:10.5px;margin-top:2px;color:${override?'#2447d6':'#aab0bb'};font-weight:${override?'700':'400'}">${money2(eff)}</span>`:'<span style="font-size:10.5px;margin-top:2px;color:#d3d7de">-</span>';
   return `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:0">
     <button onclick="chToggle('${p.id}','${flag}')" style="border:0;cursor:pointer;background:${c[0]};color:${c[1]};font-weight:800;font-size:11px;border-radius:999px;padding:4px 0;min-width:54px">${c[2]}</button>${price}</div>`;}
 function prodIssue(p){if(!(p.websiteEnabled||p.amazon||p.walmart||p.tiktok||p.google))return null;if(!p.image)return 'needs a product image';if(!p.brand)return 'brand field empty';if(effPrice(p)==null)return 'no price set';if(!p.category||p.category==='Other')return 'category missing';return null;}
 function channelIssues(){const P=S.products||[];const out=[];for(const p of P){const iss=prodIssue(p);if(iss)out.push({p,iss});if(out.length>=12)break;}return out;}
 const CH_FEE={websiteEnabled:3,google:3,amazon:15,walmart:15,tiktok:8};
-function chNet(flag){const pe=document.getElementById('cpr_'+flag),fe=document.getElementById('fee_'+flag),ne=document.getElementById('net_'+flag);if(!pe||!ne)return;const price=Number(pe.value||0);const fee=Number((fe&&fe.value)||0);const cost=Number((document.getElementById('m_cost')||{}).value||0);const ship=Number((document.getElementById('m_ship')||{}).value||0);if(!price){ne.textContent='—';ne.style.color='#9aa1ad';return;}const np=price*(1-fee/100)-ship-cost;const nm=np/price*100;ne.textContent=Math.round(nm)+'%';ne.style.color=nm>=0?'#4f8f6a':'#b56a6a';}
+function chNet(flag){const pe=document.getElementById('cpr_'+flag),fe=document.getElementById('fee_'+flag),ne=document.getElementById('net_'+flag);if(!pe||!ne)return;const price=Number(pe.value||0);const fee=Number((fe&&fe.value)||0);const cost=Number((document.getElementById('m_cost')||{}).value||0);const ship=Number((document.getElementById('m_ship')||{}).value||0);if(!price){ne.textContent='-';ne.style.color='#9aa1ad';return;}const np=price*(1-fee/100)-ship-cost;const nm=np/price*100;ne.textContent=Math.round(nm)+'%';ne.style.color=nm>=0?'#4f8f6a':'#b56a6a';}
 function chSuggest(flag){const cost=Number((document.getElementById('m_cost')||{}).value||0);const ship=Number((document.getElementById('m_ship')||{}).value||0);const margin=Number((document.getElementById('m_margin')||{}).value||0);const fee=Number((document.getElementById('fee_'+flag)||{}).value||0);if(!cost){toast('Set a unit cost first');return;}const denom=1-fee/100-margin/100;if(denom<=0){toast('Fees + margin exceed 100%');return;}document.getElementById('cpr_'+flag).value=((cost+ship)/denom).toFixed(2);chNet(flag);}
 async function chAiPrice(id){const notes=document.getElementById('ai_notes');notes.style.display='';notes.textContent='Asking AI (fees + market positioning)…';
   const margin=Number((document.getElementById('m_margin')||{}).value||20);const ship=Number((document.getElementById('m_ship')||{}).value||0);
   const fees={website:Number((document.getElementById('fee_websiteEnabled')||{}).value||3),google:Number((document.getElementById('fee_google')||{}).value||3),amazon:Number((document.getElementById('fee_amazon')||{}).value||15),walmart:Number((document.getElementById('fee_walmart')||{}).value||15),tiktok:Number((document.getElementById('fee_tiktok')||{}).value||8)};
   try{const r=await fetch('/api/ai/pricing',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,margin,ship,fees})});const d=await r.json();if(d.error)throw new Error(d.error);const s=d.suggestions||{};const map={website:'websiteEnabled',google:'google',amazon:'amazon',walmart:'walmart',tiktok:'tiktok'};Object.keys(map).forEach(k=>{if(s[k]!=null){const el=document.getElementById('cpr_'+map[k]);if(el){el.value=Number(s[k]).toFixed(2);chNet(map[k]);}}});notes.textContent=s.notes?('AI: '+s.notes):'AI filled channel prices from fees + market positioning.';}catch(e){notes.textContent='AI pricing failed: '+(e.message||e);}}
 function chPriceModal(id){const p=(S.products||[]).find(x=>x.id===id);if(!p)return;const cp=p.channelPrices||{};const retail=effPrice(p)||0;const cost=(p.costPrice!=null&&p.costPrice!=='')?Number(p.costPrice):0;
-  document.getElementById('mdl').innerHTML=`<div class="mh"><b>Channel prices — ${esc(p.name)}</b><button class="x" onclick="closeModal()">×</button></div>
+  document.getElementById('mdl').innerHTML=`<div class="mh"><b>Channel prices - ${esc(p.name)}</b><button class="x" onclick="closeModal()">×</button></div>
    <div class="mb">
      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:13px">
        <span class="sub">Retail <b style="color:#161a26">${money2(retail)}</b></span>
@@ -1805,10 +1803,10 @@ function chPriceModal(id){const p=(S.products||[]).find(x=>x.id===id);if(!p)retu
        ${PUBCH.map(c=>`<tr><td style="font-weight:600">${c[1]}</td>
          <td class="right"><input id="fee_${c[0]}" type="number" step="0.1" value="${CH_FEE[c[0]]}" style="width:58px;text-align:right;padding:5px 7px;border:1px solid var(--line);border-radius:8px" oninput="chNet('${c[0]}')"></td>
          <td class="right"><input id="cpr_${c[0]}" type="number" step="0.01" value="${cp[c[0]]!=null?cp[c[0]]:''}" placeholder="= ${retail.toFixed(2)}" style="width:82px;text-align:right;padding:5px 7px;border:1px solid var(--line);border-radius:8px" oninput="chNet('${c[0]}')"></td>
-         <td class="right" id="net_${c[0]}" style="font-weight:600;color:#9aa1ad">—</td>
+         <td class="right" id="net_${c[0]}" style="font-weight:600;color:#9aa1ad">-</td>
          <td class="right"><button class="btn sec sm" onclick="chSuggest('${c[0]}')">Suggest</button></td></tr>`).join('')}
      </tbody></table>
-     <p class="sub" style="margin-top:10px">"Suggest" = cost + that channel's fee + shipping, priced to hit your target margin. "AI suggest" also weighs typical marketplace/competitor pricing — an estimate, since there's no live competitor feed. Blank price = use retail.</p>
+     <p class="sub" style="margin-top:10px">"Suggest" = cost + that channel's fee + shipping, priced to hit your target margin. "AI suggest" also weighs typical marketplace/competitor pricing - an estimate, since there's no live competitor feed. Blank price = use retail.</p>
    </div>
    <div class="mf"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" onclick="chPriceSave('${id}')">Save</button></div>`;
   showModal();setTimeout(()=>PUBCH.forEach(c=>chNet(c[0])),0);}
@@ -1860,22 +1858,22 @@ function viewChannels(){
        <div class="card"><div class="bd" style="padding:2px 12px"><div style="overflow:auto"><table><thead><tr><th style="width:26px"></th><th>Product</th><th class="right">Cost</th><th class="right">Retail</th>${PUBCH.map(c=>`<th style="text-align:center">${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>
          ${list.length?list.map(p=>`<tr><td><input type="checkbox" ${chSel.includes(p.id)?'checked':''} onclick="chSelToggle('${p.id}')"></td>
            <td style="min-width:180px"><a onclick="openDetail('${p.id}')" style="cursor:pointer;color:inherit;display:inline-flex;align-items:center">${thumb(p,28)}<span style="font-weight:600">${esc(p.name)}</span></a></td>
-           <td class="right sub">${p.costPrice!=null&&p.costPrice!==''?money2(p.costPrice):'—'}</td>
+           <td class="right sub">${p.costPrice!=null&&p.costPrice!==''?money2(p.costPrice):'-'}</td>
            <td class="right">${money2(effPrice(p)||0)}</td>
            ${PUBCH.map(c=>`<td style="text-align:center">${pubCell(p,c[0])}</td>`).join('')}
            <td class="right"><button class="btn sec sm" onclick="chPriceModal('${p.id}')">Prices${Object.keys(p.channelPrices||{}).length?' •':''}</button></td></tr>`).join(''):`<tr><td colspan="10" class="sub" style="padding:20px">No products match.</td></tr>`}
-       </tbody></table></div>${total>60?`<div class="sub" style="padding:10px 4px">Showing 60 of ${total.toLocaleString()} — search or filter to narrow.</div>`:''}</div></div>
+       </tbody></table></div>${total>60?`<div class="sub" style="padding:10px 4px">Showing 60 of ${total.toLocaleString()} - search or filter to narrow.</div>`:''}</div></div>
      </div>
      <div>
        <div class="card"><div class="hd"><b>Blocking issues</b>${issues.length?`<span class="chip on" style="padding:2px 10px;font-size:12px">${issues.length}</span>`:''}</div><div class="bd">
-         ${issues.length?issues.map(x=>`<div style="padding:9px 0;border-bottom:1px solid #f2f3f5"><div style="font-weight:600;font-size:13px">${esc(x.p.name)}</div><div class="sub" style="font-size:12px">${x.iss} · <a onclick="editProduct('${x.p.id}')" style="color:var(--blue);cursor:pointer">Fix</a></div></div>`).join('')+`<button class="btn" style="width:100%;margin-top:12px" onclick="enrichAll()">Fix all with AI</button><div class="sub" style="margin-top:8px;font-size:11.5px">AI fills images, brands and categories for these items.</div>`:'<div class="sub" style="padding:14px 0">No blocking issues — listings look complete.</div>'}
+         ${issues.length?issues.map(x=>`<div style="padding:9px 0;border-bottom:1px solid #f2f3f5"><div style="font-weight:600;font-size:13px">${esc(x.p.name)}</div><div class="sub" style="font-size:12px">${x.iss} · <a onclick="editProduct('${x.p.id}')" style="color:var(--blue);cursor:pointer">Fix</a></div></div>`).join('')+`<button class="btn" style="width:100%;margin-top:12px" onclick="enrichAll()">Fix all with AI</button><div class="sub" style="margin-top:8px;font-size:11.5px">AI fills images, brands and categories for these items.</div>`:'<div class="sub" style="padding:14px 0">No blocking issues - listings look complete.</div>'}
        </div></div>
      </div>
    </div>`;
 }
 function backupData(){download('family-bazar-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(S,null,2));toast('Backup downloaded');}
 function restoreModal(){document.getElementById('mdl').innerHTML=`<div class="mh"><b>Restore from backup</b><button class="x" onclick="closeModal()">×</button></div>
-   <div class="mb"><div class="sub" style="margin-bottom:10px">Upload a backup JSON to load it into this server — used to seed a fresh cloud instance from your local data. <b>This replaces the current data.</b></div>
+   <div class="mb"><div class="sub" style="margin-bottom:10px">Upload a backup JSON to load it into this server - used to seed a fresh cloud instance from your local data. <b>This replaces the current data.</b></div>
      <input id="restoreFile" type="file" accept=".json,application/json" style="font-size:13px">
    </div><div class="mf"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" onclick="restoreBackup()">Restore</button></div>`;showModal();}
 async function restoreBackup(){const inp=document.getElementById('restoreFile');if(!inp||!inp.files.length){toast('Choose a backup file');return}
@@ -1897,7 +1895,7 @@ const INTEG_TITLE={ai:'AI & barcode lookup',clover:'Clover POS',woo:'WooCommerce
 function integManage(key){const fs=integFields(key);
   const fld=f=>{if(f.type==='select')return `<div class="fld"><label>${f.label}</label><select id="ig_${f.id}">${f.options.map(o=>`<option ${f.val===o?'selected':''}>${o}</option>`).join('')}</select></div>`;
     if(f.type==='bool')return `<div class="fld full"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="ig_${f.id}" style="width:auto" ${f.val?'checked':''}> ${f.label}</label></div>`;
-    if(f.type==='secret')return `<div class="fld full"><label>${f.label}</label><input type="password" id="ig_${f.id}" placeholder="${f.set?'•••• set — leave blank to keep':'not set'}" autocomplete="off"></div>`;
+    if(f.type==='secret')return `<div class="fld full"><label>${f.label}</label><input type="password" id="ig_${f.id}" placeholder="${f.set?'•••• set - leave blank to keep':'not set'}" autocomplete="off"></div>`;
     return `<div class="fld full"><label>${f.label}</label><input id="ig_${f.id}" value="${esc(f.val||'')}" placeholder="${esc(f.ph||'')}"></div>`;};
   const hasSecret=fs.some(f=>f.type==='secret');
   document.getElementById('mdl').innerHTML=`<div class="mh"><b>${INTEG_TITLE[key]}</b><button class="x" onclick="closeModal()">×</button></div>
@@ -1913,7 +1911,7 @@ async function nrsScanNow(){toast('Scanning NRS folder…');try{const r=await fe
 async function nrsEmailFetchNow(){toast('Checking Gmail for NRS reports…');try{const r=await fetch('/api/nrs/email/fetch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({days:14})});const d=await r.json();if(d.error)throw new Error(d.error);try{SET=await (await fetch('/api/settings')).json();}catch(e){}await load();render();toast('Gmail checked'+(d&&d.imported!=null?': '+d.imported+' report(s) imported':''));}catch(e){toast('Gmail fetch failed: '+(e.message||e));}}
 /* ---- Data imports (ported): Clover pull + NRS product/inventory CSV ---- */
 async function cloverImportNow(){toast('Importing catalog from Clover…');try{const r=await fetch('/api/clover/import',{method:'POST'});const d=await r.json();if(d.error)throw new Error(d.error);await load();render();toast('Clover import: '+((d.added||0))+' new · '+((d.updated||0))+' updated');}catch(e){toast('Clover import failed: '+(e.message||e));}}
-function nrsCsvModal(kind){document.getElementById('mdl').innerHTML=`<div class="mh"><b>Import ${kind==='inventory'?'inventory (stock)':'products'} — NRS CSV</b><button class="x" onclick="closeModal()">×</button></div>
+function nrsCsvModal(kind){document.getElementById('mdl').innerHTML=`<div class="mh"><b>Import ${kind==='inventory'?'inventory (stock)':'products'} - NRS CSV</b><button class="x" onclick="closeModal()">×</button></div>
    <div class="mb"><div class="sub" style="margin-bottom:10px">Upload the NRS ${kind==='inventory'?'Inventory / Stock':'Pricebook / Products'} CSV export. Your register names are preserved; the website display name is generated separately.</div>
      <input id="nrsCsvFile" type="file" accept=".csv,text/csv" style="font-size:13px">
    </div><div class="mf"><button class="btn sec" onclick="closeModal()">Cancel</button><button class="btn" onclick="nrsCsvUpload('${kind}')">Import</button></div>`;showModal();}
@@ -1925,13 +1923,13 @@ async function tagSourcesNow(){toast('Tagging product sources…');try{const r=a
 function viewIntegrations(){
   const dc=(title,desc,btn,fn,primary)=>`<div class="card"><div class="bd"><b>${title}</b><p class="sub" style="margin:6px 0 10px;min-height:32px">${desc}</p><button class="btn ${primary?'':'sec'} sm" onclick="${fn}">${btn}</button></div></div>`;
   const conns=[
-    {key:'ai',name:'AI & barcode lookup',ok:SET.aiConfigured,note:SET.aiConfigured?('Model '+(SET.aiModel||'—')+(SET.upcConfigured?' · UPC key set':' · free lookups')):'No AI key — descriptions & enrich are off'},
+    {key:'ai',name:'AI & barcode lookup',ok:SET.aiConfigured,note:SET.aiConfigured?('Model '+(SET.aiModel||'-')+(SET.upcConfigured?' · UPC key set':' · free lookups')):'No AI key - descriptions & enrich are off'},
     {key:'clover',name:'Clover POS',ok:SET.cloverConfigured,note:SET.cloverConfigured?('Merchant '+(SET.cloverMerchantId||'')):'Not connected'},
     {key:'woo',name:'WooCommerce website',ok:SET.wooConfigured,note:SET.wooConfigured?(SET.wooUrl||'connected'):'Not connected',test:true},
     {key:'sms',name:'Twilio SMS',ok:SET.smsConfigured,note:SET.smsConfigured?('From '+(SET.twilioFrom||'')):'Not connected'},
     {key:'email',name:'SendGrid email',ok:SET.emailConfigured,note:SET.emailConfigured?('From '+(SET.fromEmail||'')):'Not connected'},
-    {key:'nrs',name:'NRS auto-import (folder)',ok:SET.nrsAutoImport,note:SET.nrsAutoImport?('Watching '+(SET.nrsFolder||'folder')):'Off — drop-folder not active',scan:true},
-    {key:'nrsemail',name:'NRS reports by Gmail',ok:SET.nrsEmailFetch,note:SET.imapConfigured?('Gmail '+(SET.imapUser||'')+(SET.nrsEmailFetch?' · auto every 15 min':' · manual')):'Not connected — needed for cloud (no folder)',emailfetch:true}
+    {key:'nrs',name:'NRS auto-import (folder)',ok:SET.nrsAutoImport,note:SET.nrsAutoImport?('Watching '+(SET.nrsFolder||'folder')):'Off - drop-folder not active',scan:true},
+    {key:'nrsemail',name:'NRS reports by Gmail',ok:SET.nrsEmailFetch,note:SET.imapConfigured?('Gmail '+(SET.imapUser||'')+(SET.nrsEmailFetch?' · auto every 15 min':' · manual')):'Not connected - needed for cloud (no folder)',emailfetch:true}
   ];
   return `<h1 class="hello">Integrations</h1>
    <div style="font-size:11px;color:#9aa1ad;font-weight:800;letter-spacing:.5px;margin:16px 0 8px">API CONNECTIONS</div>
@@ -1942,10 +1940,10 @@ function viewIntegrations(){
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec sm" onclick="integManage('${c.key}')">Manage</button>${c.test?`<button class="btn sec sm" onclick="integTest('${c.key}')">Test</button>`:''}${c.scan?`<button class="btn sec sm" onclick="nrsScanNow()">Scan now</button>`:''}${c.emailfetch?`<button class="btn sec sm" onclick="nrsEmailFetchNow()">Fetch now</button>`:''}</div>
      </div></div>`).join('')}
    </div>
-   <p class="sub" style="margin:8px 0 0;font-size:11.5px">Keys are stored on your local server (secrets.json) and never sent to the browser — configured secrets show as “set” and stay unless you enter a new value.</p>
+   <p class="sub" style="margin:8px 0 0;font-size:11.5px">Keys are stored on your local server (secrets.json) and never sent to the browser - configured secrets show as “set” and stay unless you enter a new value.</p>
    <div style="font-size:11px;color:#9aa1ad;font-weight:800;letter-spacing:.5px;margin:22px 0 8px">DATA CENTER</div>
    <div class="grid3">
-     ${dc('Import products (Clover)','Pull the catalog from Clover — adds new items and updates prices.','Import from Clover','cloverImportNow()')}
+     ${dc('Import products (Clover)','Pull the catalog from Clover - adds new items and updates prices.','Import from Clover','cloverImportNow()')}
      ${dc('Import products (NRS CSV)','Add/update the catalog from an NRS pricebook CSV export.','Upload CSV',"nrsCsvModal('products')")}
      ${dc('Import inventory (NRS CSV)','Set stock counts from an NRS Inventory / Stock CSV.','Upload CSV',"nrsCsvModal('inventory')")}
      ${dc('Import customers','Bring in customers from Clover, or pull website signups.','Sync from Clover','custSync()')}
@@ -1956,7 +1954,7 @@ function viewIntegrations(){
      ${dc('Tag product sources','Label each product with where it came from (NRS / Clover).','Tag sources','tagSourcesNow()')}
      ${dc('Export reports','Download products or sales as CSV.','Export products','exportProducts()')}
      ${dc('Backup data','Download a full JSON snapshot of everything.','Backup now','backupData()',true)}
-     ${dc('Restore backup','Load a backup JSON — seed a fresh cloud server from your local data.','Restore','restoreModal()')}
+     ${dc('Restore backup','Load a backup JSON - seed a fresh cloud server from your local data.','Restore','restoreModal()')}
    </div>`;
 }
 async function chPublish(){if(!confirm('Publish all products flagged for the website?'))return;toast('Publishing…');try{const r=await fetch('/api/woo/publish',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({all:true})});const d=await r.json();const ok=(d.results||[]).filter(x=>x.ok).length;await load();render();toast('Published '+ok+' of '+((d.results||[]).length));}catch(e){toast('Publish failed: '+(e.message||e))}}
@@ -2017,17 +2015,17 @@ function viewAI(){
           <button class="btn sec" onclick="runInsight('reorder','Reorder plan by supplier')">Reorder plan by supplier</button>
           <button class="btn sec" onclick="runInsight('promo','Promo ideas for overstock')">Promo ideas for overstock</button>
         </div>
-        <p class="sub" style="margin-bottom:0">Each runs against real data — low stock, overstock, categories, and customer requests.</p>
+        <p class="sub" style="margin-bottom:0">Each runs against real data - low stock, overstock, categories, and customer requests.</p>
       </div></div>
     </div>
     <div class="card"><div class="hd"><b>${aiTitle?esc(aiTitle):'Output'}</b>${aiOut&&aiOut!=='__loading__'?`<span><button class="btn sec sm" onclick="aiCopy()">Copy</button> <button class="btn sec sm" onclick="aiOut='';render()">Clear</button></span>`:''}</div><div class="bd">
-      ${aiOut==='__loading__'?'<div class="sub" style="padding:24px;text-align:center">Thinking…</div>':aiOut?`<div style="font-size:13.5px;line-height:1.55">${mdToHtml(aiOut)}</div>`:'<div class="sub" style="padding:24px;text-align:center">Ask a question or pick a quick insight — the answer appears here.</div>'}
+      ${aiOut==='__loading__'?'<div class="sub" style="padding:24px;text-align:center">Thinking…</div>':aiOut?`<div style="font-size:13.5px;line-height:1.55">${mdToHtml(aiOut)}</div>`:'<div class="sub" style="padding:24px;text-align:center">Ask a question or pick a quick insight - the answer appears here.</div>'}
     </div></div>
   </div>`;
 }
 
 /* ============================================================
-   CATALOG HEALTH — publish status + enrichment flags (ported from index)
+   CATALOG HEALTH - publish status + enrichment flags (ported from index)
    ============================================================ */
 const FLAG_LABELS={MISSING_BARCODE:'Missing barcode',MISSING_IMAGE:'Missing image',WEAK_DISPLAY_NAME:'Weak display name',
   MISSING_SIZE_OR_COUNT:'Missing size/count',CATEGORY_UNVERIFIED:'Category unverified',BRAND_UNKNOWN:'Brand unknown',
@@ -2047,7 +2045,7 @@ function viewCatalog(){
   if(catFlag){
     const items=catFlagItems;
     const body=items==null?'<div class="sub" style="padding:14px">Loading…</div>':
-      (items.length?`<div style="overflow:auto;max-height:420px"><table><thead><tr><th>Product</th><th class="right">Score</th><th>Live</th></tr></thead><tbody>${items.map(p=>`<tr><td style="font-weight:600">${esc(p.displayName||p.name)}</td><td class="right sub">${p.nameScore==null?'—':p.nameScore}</td><td>${p.published?'🟢':'⚪'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="sub" style="padding:14px">None 🎉</div>');
+      (items.length?`<div style="overflow:auto;max-height:420px"><table><thead><tr><th>Product</th><th class="right">Score</th><th>Live</th></tr></thead><tbody>${items.map(p=>`<tr><td style="font-weight:600">${esc(p.displayName||p.name)}</td><td class="right sub">${p.nameScore==null?'-':p.nameScore}</td><td>${p.published?'🟢':'⚪'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="sub" style="padding:14px">None 🎉</div>');
     flagPanel=`<div class="card" style="margin-top:16px"><div class="hd"><b>${FLAG_LABELS[catFlag]||catFlag}</b><a class="sub" style="cursor:pointer;color:var(--blue);font-weight:700" onclick="catFlag=null;render()">Close</a></div><div class="bd">${body}<div class="sub" style="font-size:11.5px;margin-top:8px">🟢 = live on the website. Flagged products stay published.</div></div></div>`;
   }
   return `<h1 class="hello">Catalog Health <small>publishing &amp; enrichment</small></h1>
@@ -2058,8 +2056,8 @@ function viewCatalog(){
      <div class="kpi"><div class="t">Total products</div><div class="v">${s.total.toLocaleString()}</div></div>
    </div>
    <div class="card"><div class="bd">
-     <div class="sub" style="margin-bottom:10px">Everything active and priced is published. The flags below are enrichment work — they never hide a product from customers.</div>
-     <div style="font-weight:700;margin-bottom:8px">Issues — click to see the products</div>
+     <div class="sub" style="margin-bottom:10px">Everything active and priced is published. The flags below are enrichment work - they never hide a product from customers.</div>
+     <div style="font-weight:700;margin-bottom:8px">Issues - click to see the products</div>
      <div class="chips" style="margin:0">${flagRows}</div>
      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="catAuto" ${s.autoNaming?'checked':''} onchange="catSaveAuto()" style="width:auto"> Run automatically (every 2 min)</label>
@@ -2073,7 +2071,7 @@ function viewCatalog(){
 }
 
 /* ============================================================
-   FULFILLMENT — web pickup / delivery / repair queue (ported from index)
+   FULFILLMENT - web pickup / delivery / repair queue (ported from index)
    Reads S.fulfillment + S.fulfillmentLocal (kept fresh by the server every 2 min).
    ============================================================ */
 let opsFilter='all';
@@ -2100,7 +2098,7 @@ function opsCard(o){
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill ${m[0]}">${m[1]}</span><span class="sub" style="font-size:11.5px" title="${new Date(o.createdAt).toLocaleString()}">${fTimeAgo(o.createdAt)}</span></div>
     <div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(typeLabel)}${m[2]?' · '+esc(m[2]):''}${o.paid?` <span class="pill in">PAID${o.amountPaid!=null?' $'+Number(o.amountPaid).toFixed(2):''}</span>`:((o.fulfillment&&o.fulfillment!=='PICKUP')?' <span class="pill low">unpaid</span>':'')}</div>
     <div style="font-weight:800;margin-top:6px;font-size:15px">${esc(o.code)}</div>
-    <div style="font-size:13px">${esc(o.name||'—')}${o.phone?' · '+esc(o.phone):''}</div>
+    <div style="font-size:13px">${esc(o.name||'-')}${o.phone?' · '+esc(o.phone):''}</div>
     ${contact}
     ${o.phone?`<button class="btn sec sm" style="width:100%;margin-top:6px" onclick="openProfile({phone:'${esc(o.phone)}'})">View full profile ›</button>`:''}
     ${loclines?`<div style="margin-top:8px">${loclines}</div>`:(o.summary?`<div class="sub" style="font-size:12.5px;margin-top:8px">${esc(o.summary)}</div>`:'')}
@@ -2135,7 +2133,7 @@ function viewFulfillment(){
    ${grid}`;
 }
 
-/* ---- Customer profile drawer (ported) — used by Fulfillment + Customers ---- */
+/* ---- Customer profile drawer (ported) - used by Fulfillment + Customers ---- */
 let profileData=null;
 const PF_TYPE={reservation:'Pickup',order:'Order',repair:'Repair',service:'Service'};
 function pfPhone(d){const x=(d||'').replace(/\D+/g,'');return x.length===10?`(${x.slice(0,3)}) ${x.slice(3,6)}-${x.slice(6)}`:(d||'');}
@@ -2146,7 +2144,7 @@ async function openProfile(q){
 }
 function renderProfile(){
   const c=profileData;const el=document.getElementById('mdl');
-  if(!c){el.innerHTML=`<div class="mh"><b>Customer profile</b><button class="x" onclick="closeModal()">×</button></div><div class="mb"><div class="sub" style="padding:14px">No website profile for this number yet — likely a walk-in.</div></div>`;return;}
+  if(!c){el.innerHTML=`<div class="mh"><b>Customer profile</b><button class="x" onclick="closeModal()">×</button></div><div class="mb"><div class="sub" style="padding:14px">No website profile for this number yet - likely a walk-in.</div></div>`;return;}
   const tags=(c.tags||[]).map(t=>`<span class="pill" style="background:#eef2fb;color:#1e3a8a">${esc(t)} <a onclick="profileRemoveTag('${esc(t)}')" style="cursor:pointer;color:#c0453e;font-weight:800">×</a></span>`).join(' ')||'<span class="sub">No tags yet</span>';
   const tl=(c.timeline||[]).map(e=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line)"><div><div style="font-weight:600;font-size:13px">${esc(e.title)}</div><div class="sub" style="font-size:11.5px">${esc(PF_TYPE[e.type]||e.type)} · ${esc(e.code)} · ${new Date(e.at).toLocaleDateString()}</div></div><div style="text-align:right;white-space:nowrap">${esc(e.status||'')}${e.amount!=null?`<div class="sub" style="font-size:12px">$${Number(e.amount).toFixed(2)}</div>`:''}</div></div>`).join('')||'<div class="sub" style="padding:8px 0">No activity yet.</div>';
   const secH='font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#5A6B84;margin-top:16px';
@@ -2165,7 +2163,7 @@ function profileAddTag(){const el=document.getElementById('pf_tag');const v=(el&
 function profileRemoveTag(t){profileData.tags=(profileData.tags||[]).filter(x=>x!==t);saveProfileTags();}
 
 /* ============================================================
-   RECEIVING — supplier invoices → inventory (ported from index)
+   RECEIVING - supplier invoices → inventory (ported from index)
    ============================================================ */
 let invoiceList=null,invoiceLoading=false,invoiceOpen=null,invPickIdx=null,invPickQ='';
 const INV_METHOD={upc:'UPC',learned:'learned',sku:'SKU',name:'name',manual:'manual'};
@@ -2190,14 +2188,14 @@ async function invMatch(id){toast('Matching against your catalog…');try{const 
 async function invPost(id){const held=(invoiceOpen&&invoiceOpen.matchStats&&invoiceOpen.matchStats.unmatched)||0;if(!confirm(held?`Post this delivery into inventory?\n\n${held} line(s) have no product match and will be HELD.`:'Post this delivery into inventory?\n\nStock and costs will be updated.'))return;toast('Posting to inventory…');try{const d=await(await fetch('/api/invoices/post',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})})).json();if(d.error)throw new Error(d.error);invoiceOpen=d;await invLoadList();await load();render();const s=d.postStats||{};toast(`Posted ${s.posted||0} lines · ${s.unitsIn||0} units${s.held?` · ${s.held} held`:''}`);}catch(e){toast('Posting failed: '+e.message);}}
 async function invVoid(id){if(!confirm('Undo this posting?\n\nEvery posted line gets a reversing entry. Stock returns to what it was.'))return;toast('Reversing…');try{const d=await(await fetch('/api/invoices/void',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})})).json();if(d.error)throw new Error(d.error);invoiceOpen=d;await invLoadList();await load();render();toast(`Reversed ${d.reversed||0} lines`);}catch(e){toast('Undo failed: '+e.message);}}
 function invPick(i){const lines=((invoiceOpen&&invoiceOpen.extracted)||{}).lines||[];const l=lines[i]||{};const q=prompt('Search your catalog for this line:',String(l.description||'').slice(0,40));if(q===null)return;invPickIdx=i;invPickQ=String(q||'').trim().toLowerCase();render();}
-async function invPickSet(i,pid){try{const d=await(await fetch('/api/invoices/line-match',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:invoiceOpen.id,index:i,productId:pid})})).json();if(d.error)throw new Error(d.error);invoiceOpen=d;invPickIdx=null;invPickQ='';render();toast(pid?'Matched — remembered for this supplier':'Marked as new product');}catch(e){toast('Could not save match');}}
+async function invPickSet(i,pid){try{const d=await(await fetch('/api/invoices/line-match',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:invoiceOpen.id,index:i,productId:pid})})).json();if(d.error)throw new Error(d.error);invoiceOpen=d;invPickIdx=null;invPickQ='';render();toast(pid?'Matched - remembered for this supplier':'Marked as new product');}catch(e){toast('Could not save match');}}
 function invMatchCell(l,i){
   if(invPickIdx===i){const q=invPickQ;const list=q?(S.products||[]).filter(p=>((p.displayName||p.name||'')+' '+(p.brand||'')+' '+(p.barcode||'')+' '+(p.sku||'')).toLowerCase().includes(q)).slice(0,8):[];
-    return `<td style="min-width:230px"><div class="sub" style="font-size:11px">Results for "${esc(q)}"</div>${list.length?list.map(p=>`<button class="btn sec sm" style="display:block;width:100%;text-align:left;margin:2px 0" onclick="invPickSet(${i},'${esc(String(p.id))}')">${esc(p.displayName||p.name||'')}</button>`).join(''):'<div class="sub" style="font-size:11px">No catalog matches — leave as new.</div>'}<button class="btn sec sm" onclick="invPick(${i})">Search again</button> <button class="btn sec sm" onclick="invPickSet(${i},'')">New product</button> <button class="btn sec sm" onclick="invPickIdx=null;render()">Cancel</button></td>`;}
+    return `<td style="min-width:230px"><div class="sub" style="font-size:11px">Results for "${esc(q)}"</div>${list.length?list.map(p=>`<button class="btn sec sm" style="display:block;width:100%;text-align:left;margin:2px 0" onclick="invPickSet(${i},'${esc(String(p.id))}')">${esc(p.displayName||p.name||'')}</button>`).join(''):'<div class="sub" style="font-size:11px">No catalog matches - leave as new.</div>'}<button class="btn sec sm" onclick="invPick(${i})">Search again</button> <button class="btn sec sm" onclick="invPickSet(${i},'')">New product</button> <button class="btn sec sm" onclick="invPickIdx=null;render()">Cancel</button></td>`;}
   const m=l.match;
   if(!m)return `<td><span class="pill low">New product</span> <button class="btn sec sm" onclick="invPick(${i})">Pick</button></td>`;
   const tone=m.score>=0.92?'in':(m.score>=0.7?'low':'out');
-  return `<td style="min-width:180px"><div style="font-weight:600;font-size:12.5px">${esc(m.name||'—')}</div><span class="pill ${tone}" title="${esc(m.method||'')}">${esc(INV_METHOD[m.method]||m.method||'')} ${Math.round((m.score||0)*100)}%</span> <button class="btn sec sm" onclick="invPick(${i})">Change</button></td>`;
+  return `<td style="min-width:180px"><div style="font-weight:600;font-size:12.5px">${esc(m.name||'-')}</div><span class="pill ${tone}" title="${esc(m.method||'')}">${esc(INV_METHOD[m.method]||m.method||'')} ${Math.round((m.score||0)*100)}%</span> <button class="btn sec sm" onclick="invPick(${i})">Change</button></td>`;
 }
 function invDetail(){
   const r=invoiceOpen;if(!r||r.error)return '';
@@ -2208,7 +2206,7 @@ function invDetail(){
   if(ex.computedTotal!=null){const g=Number(ex.goodsTotal)||Number(inv.total)||0;const ok=!g||Math.abs(ex.computedTotal-g)<=Math.max(1,g*0.02);addUp=kpi('$'+Number(ex.computedTotal).toFixed(2),'Lines add up '+(ok?'✓':'⚠'),ok?'#15803d':'#b91c1c');}
   const lineCountOk=!ex.lineCount||ex.lineCount===lines.length;
   return `<div class="card" style="margin-top:16px"><div class="bd">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><b>🧾 ${esc(r.id)} — ${esc(inv.supplier||r.supplier||'Supplier')}</b><a class="sub" style="cursor:pointer;color:var(--blue);font-weight:700" onclick="invoiceOpen=null;render()">Close</a></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><b>🧾 ${esc(r.id)} - ${esc(inv.supplier||r.supplier||'Supplier')}</b><a class="sub" style="cursor:pointer;color:var(--blue);font-weight:700" onclick="invoiceOpen=null;render()">Close</a></div>
     ${(r.status==='uploaded'||r.status==='processing')?`<div class="sub" style="margin-top:8px">Not extracted yet. <button class="btn sec sm" onclick="invExtract('${esc(r.id)}')">Run extraction</button></div>`:''}
     ${r.status==='failed'?`<div class="sub" style="margin-top:8px;color:#b91c1c">Extraction failed: ${esc(r.error||'')}. <button class="btn sec sm" onclick="invExtract('${esc(r.id)}')">Retry</button></div>`:''}
     ${canReview?`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -2220,16 +2218,16 @@ function invDetail(){
     ${(r.status==='posted'||r.status==='partially_posted')?`<div style="margin-top:8px"><button class="btn sec sm" onclick="invVoid('${esc(r.id)}')">Undo posting</button></div>`:''}
     ${r.postStats?`<div class="card" style="background:#f0fdf4;border-color:#86efac;margin-top:10px"><div class="bd"><b>Posted:</b> ${r.postStats.posted} lines · <b>${r.postStats.unitsIn}</b> units · $${Number(r.postStats.postedValue||0).toFixed(2)}${r.postStats.created?` · <span style="color:#1d4ed8"><b>${r.postStats.created} new product(s)</b> created</span>`:''}${r.postStats.held?` · <span style="color:#b45309"><b>${r.postStats.held} held</b></span>`:''}</div></div>`:''}
     ${(r.warnings||[]).length?`<div class="card" style="background:#fffbeb;border-color:#fde68a;margin-top:10px"><div class="bd"><b>Please review:</b><ul style="margin:6px 0 0 18px">${(r.warnings||[]).map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`:''}
-    <div class="kpis" style="margin-top:12px">${kpi(esc(inv.invoiceNumber||'—'),'Invoice #')}${kpi(esc(inv.invoiceDate||'—'),'Date')}${kpi(inv.total!=null?'$'+Number(inv.total).toFixed(2):'—','Invoice total')}${addUp}${kpi(lines.length+(ex.lineCount&&!lineCountOk?' of '+ex.lineCount:''),'Line items '+(lineCountOk?'':'⚠'),lineCountOk?'':'#b91c1c')}</div>
+    <div class="kpis" style="margin-top:12px">${kpi(esc(inv.invoiceNumber||'-'),'Invoice #')}${kpi(esc(inv.invoiceDate||'-'),'Date')}${kpi(inv.total!=null?'$'+Number(inv.total).toFixed(2):'-','Invoice total')}${addUp}${kpi(lines.length+(ex.lineCount&&!lineCountOk?' of '+ex.lineCount:''),'Line items '+(lineCountOk?'':'⚠'),lineCountOk?'':'#b91c1c')}</div>
     ${lines.length?`<div style="overflow:auto;margin-top:12px"><table><thead><tr><th>Description</th><th>Item no</th><th>Pack</th><th>Cases</th><th class="right">Case cost</th><th class="right">Line total</th><th>Units in</th><th>Matched product</th><th>Conf.</th></tr></thead><tbody>
       ${lines.map((l,li)=>`<tr>
-        <td style="font-weight:600">${esc(l.description||'—')}${l.handwritten?' <span class="pill low" title="handwritten">✍</span>':''}</td>
+        <td style="font-weight:600">${esc(l.description||'-')}${l.handwritten?' <span class="pill low" title="handwritten">✍</span>':''}</td>
         <td class="sub" style="font-size:12px">${esc(l.upc||l.sku||'')}</td>
-        <td>${l.casePack!=null?esc(l.casePack):'—'}</td>
-        <td>${l.qty!=null?esc(l.qty):'—'}</td>
-        <td class="right">${l.unitCost!=null?'$'+Number(l.unitCost).toFixed(2):'—'}${(Number(l.casePack)>1&&l.unitCost!=null)?`<div class="sub" style="font-size:11px">$${(Number(l.unitCost)/Number(l.casePack)).toFixed(3)}/ea</div>`:''}</td>
-        <td class="right">${l.lineTotal!=null?'$'+Number(l.lineTotal).toFixed(2):'—'}</td>
-        <td style="font-weight:700">${(l.qty!=null&&Number(l.casePack)>0)?esc(Number(l.qty)*Number(l.casePack)):(l.qty!=null?esc(l.qty):'—')}${l.posted?(l.createdNew?' <span class="pill in">✓ new</span>':' <span class="pill in">✓</span>'):(l.holdReason?` <span class="pill low" title="${esc(l.holdReason)}">held</span>`:'')}</td>
+        <td>${l.casePack!=null?esc(l.casePack):'-'}</td>
+        <td>${l.qty!=null?esc(l.qty):'-'}</td>
+        <td class="right">${l.unitCost!=null?'$'+Number(l.unitCost).toFixed(2):'-'}${(Number(l.casePack)>1&&l.unitCost!=null)?`<div class="sub" style="font-size:11px">$${(Number(l.unitCost)/Number(l.casePack)).toFixed(3)}/ea</div>`:''}</td>
+        <td class="right">${l.lineTotal!=null?'$'+Number(l.lineTotal).toFixed(2):'-'}</td>
+        <td style="font-weight:700">${(l.qty!=null&&Number(l.casePack)>0)?esc(Number(l.qty)*Number(l.casePack)):(l.qty!=null?esc(l.qty):'-')}${l.posted?(l.createdNew?' <span class="pill in">✓ new</span>':' <span class="pill in">✓</span>'):(l.holdReason?` <span class="pill low" title="${esc(l.holdReason)}">held</span>`:'')}</td>
         ${invMatchCell(l,li)}
         <td><span class="pill ${invConf(l.confidence)}">${Math.round((Number(l.confidence)||0)*100)}%</span></td>
       </tr>`).join('')}
@@ -2239,8 +2237,8 @@ function invDetail(){
 function viewReceiving(){
   if(invoiceList===null){if(!invoiceLoading)invLoadList();return loadingScreen('Receiving');}
   const rows=invoiceList.length?invoiceList.map(r=>`<tr>
-      <td style="font-weight:700;font-size:12px">${esc(r.id)}</td><td>${esc(r.supplier||'—')}</td><td>${r.lines||0}</td>
-      <td class="right">${r.total!=null?'$'+Number(r.total).toFixed(2):'—'}</td>
+      <td style="font-weight:700;font-size:12px">${esc(r.id)}</td><td>${esc(r.supplier||'-')}</td><td>${r.lines||0}</td>
+      <td class="right">${r.total!=null?'$'+Number(r.total).toFixed(2):'-'}</td>
       <td><span class="pill ${invBadge(r.status)}">${esc((r.status||'').replace('_',' '))}</span>${r.warnings?` <span class="pill low">${r.warnings}⚠</span>`:''}</td>
       <td class="right"><button class="btn sec sm" onclick="invOpen('${esc(r.id)}')">Open</button></td>
     </tr>`).join(''):`<tr><td colspan="6" class="sub" style="padding:20px">No invoices yet. Upload a supplier invoice (PDF or photo) to receive stock.</td></tr>`;
@@ -2272,7 +2270,7 @@ function render(){
      </nav>
      <div class="userbox">
        <div class="av">${(ME&&ME.name?ME.name:'?').slice(0,2).toUpperCase()}</div>
-       <div style="flex:1;min-width:0"><div class="nm">${esc(ME&&ME.name?ME.name:'—')}</div><div class="rl" style="text-transform:capitalize">${esc(ME&&ME.role?ME.role:'')}</div></div>
+       <div style="flex:1;min-width:0"><div class="nm">${esc(ME&&ME.name?ME.name:'-')}</div><div class="rl" style="text-transform:capitalize">${esc(ME&&ME.role?ME.role:'')}</div></div>
        ${AUTH_ON?`<button onclick="logout()" title="Sign out" style="border:0;background:#f6f7f9;border-radius:8px;padding:6px 9px;font-size:12px;font-weight:700;color:#5b6270;cursor:pointer">Sign out</button>`:''}
      </div>
    </aside>
