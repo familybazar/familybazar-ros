@@ -75,7 +75,25 @@
     .content{padding-left:16px;padding-right:16px}
     .roleseg{display:none}
     .synced{display:none}
+    .content{padding-bottom:96px}
   }
+  /* bottom tab bar (mobile only) */
+  .tabbar{display:none}
+  @media(max-width:960px){
+    .tabbar{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:60;background:#fff;border-top:1px solid var(--line);
+            justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+    .tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 2px;color:#8a92a3;font-size:10.5px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
+    .tabbar a.active{color:var(--blue)}
+    .tabbar a .ico{width:22px;height:22px;opacity:.95}
+  }
+  /* product cards (rendered instead of the wide table on phones) */
+  .mcard{border:1px solid var(--line);border-radius:15px;padding:13px;margin-bottom:10px;background:#fff;box-shadow:var(--shadow)}
+  .mcard .r1{display:flex;gap:11px;align-items:flex-start}
+  .mcard .nm{font-weight:650;font-size:14.5px;line-height:1.25}
+  .mcard .price{margin-left:auto;text-align:right;font-weight:800;font-size:15px;white-space:nowrap}
+  .mcard .r2{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:11px;font-size:12px;color:var(--muted)}
+  .mcard .acts{display:flex;gap:8px;margin-top:12px}
+  .mcard .acts .btn{flex:1;justify-content:center;text-align:center}
   .card{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
   .card .hd{display:flex;align-items:center;justify-content:space-between;padding:15px 18px 6px}
   .card .hd b{font-size:15px}
@@ -224,6 +242,14 @@ const LIVE={products:1,catalog:1,inventory:1,receiving:1,fulfillment:1,sales:1,f
 
 let detailId=null;
 function go(k){ if(active==='cashentry'&&k!=='cashentry'&&typeof mfDirty!=='undefined'&&mfDirty){ if(!confirm('You have unsaved cash entry changes. Leave without saving?'))return; mfDirty=false; } detailId=null;active=k;navOpen=false;render();window.scrollTo(0,0)}
+const TABBAR=[['overview','Home','overview'],['products','Products','products'],['sales','Sales','sales'],['finance','Finance','finance']];
+function tabbarHtml(){
+  const tabs=TABBAR.map(([k,label,i])=>`<a class="${active===k&&!navOpen?'active':''}" onclick="go('${k}')">${ic(i,22)}<span>${label}</span></a>`).join('');
+  return `<nav class="tabbar">${tabs}<a class="${navOpen?'active':''}" onclick="navOpen=!navOpen;render()">${ic('menu',22)}<span>More</span></a></nav>`;
+}
+function isMobileView(){ return window.matchMedia('(max-width:960px)').matches; }
+let _wasMobile=isMobileView();
+window.addEventListener('resize',()=>{ const m=isMobileView(); if(m!==_wasMobile){ _wasMobile=m; if(!navOpen){ try{ render(); }catch(e){} } } });
 function openDetail(id){detailId=id;render();window.scrollTo(0,0)}
 function closeDetail(){detailId=null;render();window.scrollTo(0,0)}
 function setRole(r){role=r;render()}
@@ -390,7 +416,7 @@ function pList(){const q=pSearch.toLowerCase();
     case 'margin':return (marginPct(b)??-1e9)-(marginPct(a)??-1e9);
     default:return (a.name||'').toLowerCase()<(b.name||'').toLowerCase()?-1:1;}});
   return l}
-function refreshRows(){const tb=document.getElementById('ptb');if(tb)tb.innerHTML=prows();const c=document.getElementById('pcount');if(c)c.textContent=pList().length.toLocaleString()}
+function refreshRows(){const tb=document.getElementById('ptb');if(tb)tb.innerHTML=prows();const cc=document.getElementById('pcards');if(cc)cc.innerHTML=pcards();const c=document.getElementById('pcount');if(c)c.textContent=pList().length.toLocaleString()}
 function viewProducts(){
   _sold=soldMap();
   const cats=distinctVals('category'),brands=distinctVals('brand'),srcs=distinctVals('source');
@@ -414,9 +440,30 @@ function viewProducts(){
       <option value="stock" ${pSort==='stock'?'selected':''}>Sort: Stock low–high</option>
     </select>
   </div>
-  <div class="card"><div class="bd" style="padding:2px 12px"><div style="overflow:auto"><table><thead><tr>
+  ${isMobileView()
+    ? `<div id="pcards">${pcards()}</div>`
+    : `<div class="card"><div class="bd" style="padding:2px 12px"><div style="overflow:auto"><table><thead><tr>
     <th>Product</th><th>SKU</th><th>Category</th><th>Stock</th><th class="right">Price</th><th class="right">Cost</th><th class="right">Margin</th><th>Shelf</th><th>Channels</th><th>Status</th><th></th>
-  </tr></thead><tbody id="ptb">${prows()}</tbody></table></div></div></div>`;
+  </tr></thead><tbody id="ptb">${prows()}</tbody></table></div></div></div>`}`;
+}
+function pcards(){ const l=pList(); if(!l.length) return `<div class="card"><div class="bd"><div class="sub" style="padding:20px">No products match these filters.</div></div></div>`;
+  return l.slice(0,200).map(p=>{ const st=stockState(p); const mp=marginPct(p);
+    return `<div class="mcard">
+      <div class="r1" onclick="openDetail('${p.id}')" style="cursor:pointer">
+        ${thumb(p,46)}
+        <div style="min-width:0;flex:1"><div class="nm">${esc(p.name)} ${srcBadge(p.source)}</div>${p.brand?`<div class="sub" style="font-size:11.5px">${esc(p.brand)}</div>`:''}${p.sku?`<div class="sub" style="font-size:11px">${esc(p.sku)}</div>`:''}</div>
+        <div class="price">${money2(effPrice(p)||0)}${mp!=null?`<div class="sub" style="font-size:11px;font-weight:600;color:${mp>=0?'#4f8f6a':'#b56a6a'}">${Math.round(mp)}% margin</div>`:''}</div>
+      </div>
+      <div class="r2">
+        <span class="pill ${st}">${st==='out'?'Out':(st==='low'?'Low · ':'')+(p.qty||0)}</span>
+        ${p.aisle?`<span>${esc(p.aisle)}${p.shelf?' · Shelf '+esc(p.shelf):''}</span>`:''}
+        ${statusPill(p)}
+      </div>
+      <div class="acts">
+        <button class="btn sec sm" onclick="editProduct('${p.id}')">Edit</button>
+        <button class="btn sec sm" onclick="adjStock('${p.id}')">Stock</button>
+      </div>
+    </div>`; }).join('')+(l.length>200?`<div class="sub" style="padding:10px 4px">Showing 200 of ${l.length}. Refine filters to see more.</div>`:'');
 }
 function prows(){const l=pList();if(!l.length)return `<tr><td colspan="11" class="sub" style="padding:22px">No products match these filters.</td></tr>`;
   return l.slice(0,400).map(p=>{const st=stockState(p);const mp=marginPct(p);return `<tr>
@@ -2471,7 +2518,8 @@ function render(){
        </div>`:''}
      </div>
      <div class="content">${detailId?viewProductDetail(detailId):active==='overview'?viewOverview():active==='products'?viewProducts():active==='catalog'?viewCatalog():active==='inventory'?viewInventory():active==='receiving'?viewReceiving():active==='fulfillment'?viewFulfillment():active==='sales'?viewSales():active==='finance'?viewFinance():active==='cashentry'?viewCashEntry():active==='recurring'?viewRecurring():active==='customers'?viewCustomers():active==='operations'?viewOperations():active==='channels'?viewChannels():active==='marketing'?viewMarketing():active==='integrations'?viewIntegrations():active==='reports'?viewReports():active==='ai'?viewAI():viewPlaceholder(active,(NAV.find(n=>n[0]===active)||[,'Screen'])[1])}</div>
-   </div>`;
+   </div>
+   ${tabbarHtml()}`;
   if(_afId){const el=document.getElementById(_afId);if(el&&typeof el.focus==='function'){try{el.focus();if(_afPos!=null&&el.setSelectionRange)el.setSelectionRange(_afPos,_afPos);}catch(e){}}}
   if(active==='cashentry'){ try{ mfRecalc(); }catch(e){} }   // populate live summaries after the DOM is built
 }
