@@ -76,6 +76,9 @@
     .roleseg{display:none}
     .synced{display:none}
     .content{padding-bottom:96px}
+    .desk-only{display:none!important}
+    .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+    .toolbar select{width:100%;min-width:0;margin:0!important}
   }
   /* bottom tab bar (mobile only) */
   .tabbar{display:none}
@@ -389,6 +392,7 @@ function attnRow(color,title,subt,fn,cta){window._attn=window._attn||{};const id
 
 function openLive(mod){ window.location.href='/classic'; }
 function topSearch(q){ pSearch=(q||'').trim(); detailId=null; active='products'; render(); window.scrollTo(0,0); }
+function topSearchLive(v){ pSearch=v; if(active==='products'&&!detailId){ refreshRows(); } }
 
 function viewPlaceholder(k,name){
   const live=LIVE[k];
@@ -448,10 +452,10 @@ function viewProducts(){
   const list=pList();const opt=(v,cur)=>`<option value="${esc(v)}" ${cur===v?'selected':''}>${esc(v)}</option>`;
   return `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
     <h1 class="hello" style="margin:0">Products <small>${(S.products||[]).length.toLocaleString()} products · <span id="pcount">${list.length.toLocaleString()}</span> shown</small></h1>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec" onclick="enrichAll()">Enrich all</button><button class="btn sec" onclick="fillImagesNow()">Fill images</button><button class="btn sec" onclick="imgCoverageNow()">Image coverage</button><button class="btn sec" onclick="window.location.href='/classic'">Scan / AI import →</button><button class="btn" onclick="editProduct()">+ Add product</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec desk-only" onclick="enrichAll()">Enrich all</button><button class="btn sec desk-only" onclick="fillImagesNow()">Fill images</button><button class="btn sec desk-only" onclick="imgCoverageNow()">Image coverage</button><button class="btn sec desk-only" onclick="window.location.href='/classic'">Scan / AI import →</button><button class="btn" onclick="editProduct()">+ Add product</button></div>
   </div>
   <div class="toolbar">
-    <input class="search-in" placeholder="Search products…" value="${esc(pSearch)}" oninput="pSearch=this.value;refreshRows()">
+    <input class="search-in desk-only" placeholder="Search products…" value="${esc(pSearch)}" oninput="pSearch=this.value;refreshRows()">
     <select onchange="pCat=this.value;render()"><option value="">Category: All</option>${cats.map(c=>opt(c,pCat)).join('')}</select>
     <select onchange="pBrand=this.value;render()"><option value="">Brand: All</option>${brands.map(c=>opt(c,pBrand)).join('')}</select>
     <select onchange="pSrc=this.value;render()"><option value="">Source: All</option>${srcs.map(c=>opt(c,pSrc)).join('')}</select>
@@ -2533,7 +2537,7 @@ function render(){
    <div class="main">
      <div class="topbar">
        <button class="hamb" aria-label="Menu" onclick="navOpen=!navOpen;render()">${ic('menu',22)}</button>
-       <div class="search">${ic('search',17)}<input placeholder="Search product, barcode, SKU, brand, or shelf…" value="${esc(pSearch)}" onkeydown="if(event.key==='Enter')topSearch(this.value)"></div>
+       <div class="search">${ic('search',17)}<input placeholder="Search product, barcode, SKU, brand, or shelf…" value="${esc(pSearch)}" oninput="topSearchLive(this.value)" onkeydown="if(event.key==='Enter')topSearch(this.value)"></div>
        <div class="synced" id="syncwrap" onclick="manualSync()" title="Click to refresh now" style="cursor:pointer"><span class="dot"></span><span id="syncind">${syncText()}</span></div>
        ${role!=='employee'?mfBellHtml():''}
        ${ME&&ME.role==='owner'?`<div class="roleseg" title="Preview the layout each role sees. Your owner permissions are unchanged.">
