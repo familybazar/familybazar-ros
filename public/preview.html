@@ -61,7 +61,21 @@
   .up{color:var(--green);font-weight:700} .down{color:var(--red);font-weight:700}
   .warn{color:var(--amber)}
   .grid2{display:grid;grid-template-columns:1.7fr 1fr;gap:16px}
-  @media(max-width:960px){.grid2{grid-template-columns:1fr}.side{display:none}.detgrid{grid-template-columns:1fr!important}.detsub{grid-template-columns:1fr!important}}
+  .hamb{display:none;border:0;background:transparent;color:var(--ink);cursor:pointer;padding:6px;margin-left:-4px;border-radius:9px}
+  .hamb:hover{background:#f2f3f6}
+  .navoverlay{display:none}
+  @media(max-width:960px){
+    .grid2{grid-template-columns:1fr}.detgrid{grid-template-columns:1fr!important}.detsub{grid-template-columns:1fr!important}
+    .hamb{display:inline-flex}
+    .side{position:fixed;top:0;left:0;z-index:70;width:82%;max-width:300px;height:100dvh;transform:translateX(-100%);transition:transform .24s ease;box-shadow:0 12px 44px rgba(10,20,40,.28);padding-top:env(safe-area-inset-top)}
+    .side.open{transform:translateX(0)}
+    .navoverlay.show{display:block;position:fixed;inset:0;background:rgba(10,20,40,.45);z-index:65}
+    .topbar{padding:0 12px;gap:10px;padding-top:env(safe-area-inset-top)}
+    .search{max-width:none}
+    .content{padding-left:16px;padding-right:16px}
+    .roleseg{display:none}
+    .synced{display:none}
+  }
   .card{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
   .card .hd{display:flex;align-items:center;justify-content:space-between;padding:15px 18px 6px}
   .card .hd b{font-size:15px}
@@ -160,7 +174,7 @@
 (function(){const _f=window.fetch.bind(window);window.fetch=function(u,o){o=o||{};const h=new Headers(o.headers||{});if(!h.has('ngrok-skip-browser-warning'))h.set('ngrok-skip-browser-warning','true');return _f(u,Object.assign({},o,{headers:h}))};})();
 
 let S={products:[],events:[],requests:[],customers:[],webSales:[],posSales:[]};
-let active='overview', role='owner', ME=null, AUTH_ON=false;
+let active='overview', role='owner', ME=null, AUTH_ON=false, navOpen=false;
 // If any API says the session expired, bounce to the login page.
 const _origFetch = window.fetch;
 window.fetch = async (...a) => { const r = await _origFetch(...a); if (r.status === 401) location.href = '/login.html'; return r; };
@@ -186,7 +200,9 @@ const ICONS={
  receiving:'<path d="M16 16v-2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v2"/><path d="M2 10l2-5h9l2 5"/><circle cx="6" cy="18" r="2"/><path d="M16 8h3l3 4v4h-4"/><circle cx="18" cy="18" r="2"/>',
  fulfillment:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>',
  health:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
- cash:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>'
+ cash:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+ menu:'<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
+ close:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
 };
 function ic(n,s){s=s||18;return `<svg class="ico" viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]||''}</svg>`}
 function esc(x){return(x==null?'':String(x)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -207,7 +223,7 @@ const NAV=[
 const LIVE={products:1,catalog:1,inventory:1,receiving:1,fulfillment:1,sales:1,finance:1,cashentry:1,customers:1,channels:1,ai:1,integrations:1};
 
 let detailId=null;
-function go(k){ if(active==='cashentry'&&k!=='cashentry'&&typeof mfDirty!=='undefined'&&mfDirty){ if(!confirm('You have unsaved cash entry changes. Leave without saving?'))return; mfDirty=false; } detailId=null;active=k;render();window.scrollTo(0,0)}
+function go(k){ if(active==='cashentry'&&k!=='cashentry'&&typeof mfDirty!=='undefined'&&mfDirty){ if(!confirm('You have unsaved cash entry changes. Leave without saving?'))return; mfDirty=false; } detailId=null;active=k;navOpen=false;render();window.scrollTo(0,0)}
 function openDetail(id){detailId=id;render();window.scrollTo(0,0)}
 function closeDetail(){detailId=null;render();window.scrollTo(0,0)}
 function setRole(r){role=r;render()}
@@ -2428,7 +2444,7 @@ function render(){
   const nav=NAV.filter(([k])=> role==='employee' ? ['overview','products','inventory','receiving','fulfillment','catalog'].includes(k) : true);
   const app=document.getElementById('app');
   app.innerHTML=`
-   <aside class="side">
+   <aside class="side${navOpen?' open':''}">
      <div class="brand"><div class="logo">FB</div><div><b>Family Bazar</b><br><span>RETAIL OS</span></div></div>
      <nav class="nav">
        ${nav.map(([k,name,i])=>`<a class="${active===k?'active':''}" onclick="go('${k}')">${ic(i)}<span>${name}</span>${k==='operations'&&S.requests&&S.requests.filter(r=>r.status==='Open').length?`<span class="badge">${S.requests.filter(r=>r.status==='Open').length}</span>`:''}</a>`).join('')}
@@ -2441,8 +2457,10 @@ function render(){
        ${AUTH_ON?`<button onclick="logout()" title="Sign out" style="border:0;background:#f6f7f9;border-radius:8px;padding:6px 9px;font-size:12px;font-weight:700;color:#5b6270;cursor:pointer">Sign out</button>`:''}
      </div>
    </aside>
+   <div class="navoverlay${navOpen?' show':''}" onclick="navOpen=false;render()"></div>
    <div class="main">
      <div class="topbar">
+       <button class="hamb" aria-label="Menu" onclick="navOpen=!navOpen;render()">${ic('menu',22)}</button>
        <div class="search">${ic('search',17)}<input placeholder="Search product, barcode, SKU, brand, or shelf…" value="${esc(pSearch)}" onkeydown="if(event.key==='Enter')topSearch(this.value)"></div>
        <div class="synced" id="syncwrap" onclick="manualSync()" title="Click to refresh now" style="cursor:pointer"><span class="dot"></span><span id="syncind">${syncText()}</span></div>
        ${role!=='employee'?mfBellHtml():''}
