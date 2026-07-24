@@ -1055,8 +1055,7 @@ const MF_PRESETS={
     monthly:['Rent','Electric Bill','Wi-Fi','Phone','Garbage','National Grid'],
     yearly:['Insurance'], once:[] },
   phone:{ daily:[], weekly:['Employee Pay'], biweekly:['Employee Pay'],
-    monthly:['Rent','Electric Bill','Wi-Fi','Phone','Garbage','National Grid'],
-    yearly:['Insurance'], once:[] }
+    monthly:[], yearly:[], once:[] }
 };
 function mfFindExp(book,name,freq){ return (mfEnsure().recurring||[]).find(x=>x.book===book&&(x.name||'').trim().toLowerCase()===String(name).trim().toLowerCase()&&x.frequency===freq); }
 function mfExpEnsure(book,name,freq){ let it=mfFindExp(book,name,freq); if(!it){ it={id:uid('rc'),book,name,category:'Other',frequency:freq,amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}; mfEnsure().recurring.push(it); } return it; }
