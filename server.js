@@ -37,7 +37,7 @@ function uid(p){ return p+'_'+Date.now().toString(36)+Math.random().toString(36)
 function now(){ return new Date().toISOString(); }
 
 /* ---------- initial data ---------- */
-function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, salesTx:[], salesDaily:{}, salesMeta:{}, manualFinance:{ sales:[], expenses:[], settings:{ defaultGpPct:28 } }, nrsEmails:{}, nrsDaily:{}, nrsItems:[], nrsInventory:{}, nrsAggregate:null, nrsMeta:{}, fulfillment:[], fulfillmentLocal:{}, version:1 }; }
+function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, salesTx:[], salesDaily:{}, salesMeta:{}, manualFinance:{ sales:[], expenses:[], settings:{ defaultGpPct:28 } }, nrsEmails:{}, nrsDaily:{}, nrsItems:[], nrsInventory:{}, nrsAggregate:null, nrsMeta:{}, billProviders:[], billDetections:{}, billMeta:{}, fulfillment:[], fulfillmentLocal:{}, version:1 }; }
 if (!fs.existsSync(DATA))    writeJSON(DATA, emptyData());
 if (!fs.existsSync(SECRETS)) writeJSON(SECRETS, {
   upcApiKey:'', aiProvider:'anthropic', aiApiKey:'', aiModel:'claude-haiku-4-5',
@@ -51,12 +51,18 @@ if (!fs.existsSync(SECRETS)) writeJSON(SECRETS, {
 let data    = readJSON(DATA, emptyData());
 let secrets = readJSON(SECRETS, {});
 // Backfill new top-level stores onto an existing data.json (a loaded file doesn't get emptyData()'s keys).
-['nrsEmails','nrsDaily','nrsInventory','nrsMeta','salesDaily','salesMeta'].forEach(k=>{
+['nrsEmails','nrsDaily','nrsInventory','nrsMeta','salesDaily','salesMeta','billDetections','billMeta'].forEach(k=>{
   if(!data[k] || typeof data[k]!=='object' || Array.isArray(data[k])) data[k]={};
 });
 if(!Array.isArray(data.nrsItems)) data.nrsItems=[];
 if(!Array.isArray(data.salesTx))  data.salesTx=[];
+if(!Array.isArray(data.billProviders)) data.billProviders=[];
 if(data.nrsAggregate===undefined) data.nrsAggregate=null;
+// Seed a default utility-bill provider (Con Edison) once, so email detection has a target out of the box.
+if(!data.billProviders.some(p=>p.id==='coned')){
+  data.billProviders.push({ id:'coned', name:'Con Edison', book:'general', category:'Utilities',
+    senders:['coned.com','conedison.com'], subjectMatch:'', matchName:'Electric Bill', active:true, seeded:true });
+}
 
 // --- Secrets from environment (for cloud hosting) --------------------------------------------------
 // So you never have to commit keys. Two ways, applied over whatever is in secrets.json:
@@ -225,6 +231,7 @@ function requiredRole(url, method){
   if(url.startsWith('/api/users')) return 'owner';                        // team management
   if(url==='/api/data/reset' || url==='/api/nrs/reset') return 'owner';   // destructive
   if(url==='/api/nrs/backfill') return 'manager';                        // preview-first, but writes on commit
+  if(url.startsWith('/api/bills/')) return 'manager';                    // bill detection + confirm
   if(method==='POST' && (url==='/api/marketing/send' || url==='/api/woo/publish' ||
        url==='/api/catalog/publish-all' || url==='/api/invoices/post' || url==='/api/invoices/void' ||
        url==='/api/sales/clover/pull' || url==='/api/clover/rebuild'))
@@ -1755,6 +1762,94 @@ function nrsGmailRun(opts){
 function imapFetchNrs(sinceDays){ return nrsGmailRun({ sinceDays:sinceDays||45, preview:false }); }
 setInterval(()=>{ if(secrets.nrsEmailFetch) nrsGmailRun({ sinceDays:45, preview:false }).catch(()=>{}); }, 15*60*1000);
 
+/* ================= Utility-bill email detection (Con Edison, National Grid, internet…) ==========
+   Reuses the same read-only IMAP + the AI text model to read the ACTUAL amount + due date on variable
+   bills. Writes to data.billDetections (a separate, non-destructive store) as "detected, awaiting
+   confirmation" - it never marks anything paid and never changes a recurring bill until the owner
+   confirms in Automated Finance. If the email has no amount (many utilities link to a portal), it is
+   still recorded as "bill ready, add amount" so the owner gets a nudge instead of a silent miss. */
+async function billExtract(bodyText, providerName){
+  const text=(bodyText||'').replace(/\s+/g,' ').slice(0,6000);
+  if(!text) return { error:'empty body' };
+  const prompt='Extract billing details from this utility/service bill email for a small store. Provider: '
+    +(providerName||'unknown')+'. Return ONLY compact JSON with keys: amount (number = total amount due in USD, '
+    +'no symbols; null if not explicitly stated), dueDate (YYYY-MM-DD or null), invoiceNo (string or null), '
+    +'accountNo (string or null), amountFound (true only if a dollar amount due is explicitly present). '
+    +'Never guess an amount that is not in the text. Email:\n"""'+text+'"""';
+  let raw; try{ raw=await aiText(prompt, 300); }catch(e){ return { error:'ai: '+(e&&e.message||e) }; }
+  const m=(raw||'').match(/\{[\s\S]*\}/); if(!m) return { error:'no json' };
+  let obj; try{ obj=JSON.parse(m[0]); }catch(e){ return { error:'bad json' }; }
+  const amt=(obj.amount!=null&&obj.amountFound)?Number(String(obj.amount).replace(/[^0-9.\-]/g,'')):null;
+  return { amount:isFinite(amt)?amt:null, dueDate:obj.dueDate||null, invoiceNo:obj.invoiceNo||null, accountNo:obj.accountNo||null, amountFound:!!obj.amountFound };
+}
+function billGmailRun(opts){
+  opts=opts||{};
+  data.billDetections=data.billDetections||{}; data.billMeta=data.billMeta||{}; data.billProviders=data.billProviders||[];
+  return new Promise((resolve)=>{
+    let tls; try{ tls=require('tls'); }catch(e){ return resolve({error:'tls module unavailable'}); }
+    const providers=(data.billProviders||[]).filter(p=>p.active!==false);
+    if(!providers.length) return resolve({ error:'No bill providers configured.' });
+    const host=(secrets.imapHost||'imap.gmail.com').trim(); const port=Number(secrets.imapPort)||993;
+    const user=(secrets.imapUser||secrets.fromEmail||'').trim(); const pass=(secrets.imapPass||'').trim();
+    if(!user||!pass) return resolve({error:'Add the mailbox email + Gmail app password in Settings.'});
+    const folder=(secrets.imapFolder||'[Gmail]/All Mail');
+    const sinceDate=new Date(Date.now()-((opts.sinceDays||60)*86400000));
+    const log={ providers:providers.map(p=>p.name), found:0, detected:0, skippedDuplicate:0, noAmount:0, failed:[] };
+    let buf=''; const waiters=[]; let done=false;
+    const finish=(v)=>{ if(done)return; done=true; try{sock.end();}catch(e){} resolve(v); };
+    const sock=tls.connect({host,port,servername:host}); sock.setEncoding('binary');
+    sock.setTimeout(120000, ()=>finish(Object.assign(log,{error:'IMAP timed out.'})));
+    sock.on('error', e=>finish(Object.assign(log,{error:'IMAP connection error: '+e.message})));
+    function pump(){ if(!waiters.length)return; const w=waiters[0]; const re=new RegExp('^'+w.tag+' (OK|NO|BAD)[^\\r\\n]*\\r\\n','m'); const m=re.exec(buf);
+      if(m){ const end=m.index+m[0].length; const chunk=buf.slice(0,end); buf=buf.slice(end); waiters.shift(); w.resolve({raw:chunk, ok:m[1]==='OK'}); pump(); } }
+    sock.on('data', d=>{ buf+=d; if(greeted) pump(); else if(/^\* OK/m.test(buf)){ greeted=true; buf=''; run(); } });
+    let greeted=false, tagN=0;
+    const cmd=(line)=>{ const t='B'+(++tagN); return new Promise(r=>{ waiters.push({tag:t,resolve:r}); sock.write(t+' '+line+'\r\n'); }); };
+    async function run(){
+      try{
+        let r=await cmd('LOGIN "'+user.replace(/(["\\])/g,'\\$1')+'" "'+pass.replace(/(["\\])/g,'\\$1')+'"');
+        if(!r.ok) return finish(Object.assign(log,{error:'Login failed - check the Gmail app password.'}));
+        const ex=await cmd('EXAMINE "'+folder.replace(/(["\\])/g,'\\$1')+'"');
+        if(!ex.ok) return finish(Object.assign(log,{error:'Could not open mailbox "'+folder+'".'}));
+        for(const prov of providers){
+          const senders=(prov.senders&&prov.senders.length?prov.senders:[prov.sender||'']).filter(Boolean);
+          let uids=[];
+          for(const snd of senders){
+            const sr=await cmd('UID SEARCH SINCE '+imapDateStr(sinceDate)+' FROM "'+snd.replace(/(["\\])/g,'\\$1')+'"');
+            const sl=(sr.raw.match(/\* SEARCH([^\r\n]*)/)||[])[1]||'';
+            uids=uids.concat(sl.trim().split(/\s+/).filter(Boolean).map(Number).filter(n=>n>0));
+          }
+          uids=[...new Set(uids)].sort((a,b)=>a-b).slice(-6);   // newest few bills per provider
+          for(const uid of uids){
+            log.found++;
+            let msg='';
+            try{ const fr=await cmd('UID FETCH '+uid+' (BODY.PEEK[])'); const lm=fr.raw.match(/BODY\[\]\s*\{(\d+)\}\r\n/); if(!lm) continue; const start=fr.raw.indexOf(lm[0])+lm[0].length; msg=fr.raw.substr(start, Number(lm[1])); }
+            catch(e){ log.failed.push({uid,reason:'fetch: '+(e&&e.message||e)}); continue; }
+            const subject=nrsHeaderVal(msg,'subject'); const messageId=(nrsHeaderVal(msg,'message-id')||'').replace(/[<>]/g,'').trim();
+            if(prov.subjectMatch && !subject.toLowerCase().includes(prov.subjectMatch.toLowerCase())) continue;
+            const key=prov.id+'|'+(messageId||('uid:'+uid));
+            if(data.billDetections[key]){ log.skippedDuplicate++; continue; }   // already seen this bill email
+            const b=nrsExtractBodies(msg); const bodyText=(b.text||'').replace(/<[^>]+>/g,' ') || nrsStripHtml(b.html);
+            const dateHdr=nrsHeaderVal(msg,'date'); const receivedMs=dateHdr?(Date.parse(dateHdr)||Date.now()):Date.now();
+            let ext; try{ ext=await billExtract(bodyText, prov.name); }catch(e){ ext={error:String(e&&e.message||e)}; }
+            data.billDetections[key]={ key, provider:prov.name, providerId:prov.id, book:prov.book||'general',
+              category:prov.category||'Utilities', matchName:prov.matchName||prov.name, messageId, subject,
+              receivedAt:new Date(receivedMs).toISOString(), amount:(ext&&ext.amount!=null)?ext.amount:null,
+              dueDate:(ext&&ext.dueDate)||null, invoiceNo:(ext&&ext.invoiceNo)||null, accountNo:(ext&&ext.accountNo)||null,
+              amountFound:!!(ext&&ext.amountFound), status:'new', error:(ext&&ext.error)||null, detectedAt:now() };
+            if(ext&&ext.amount!=null) log.detected++; else log.noAmount++;
+          }
+        }
+        await cmd('LOGOUT');
+        data.billMeta.lastRun={ at:now(), found:log.found, detected:log.detected, noAmount:log.noAmount, failed:log.failed.length };
+        saveData();
+        finish(log);
+      }catch(e){ finish(Object.assign(log,{error:'IMAP error: '+(e&&e.message||e)})); }
+    }
+  });
+}
+setInterval(()=>{ if(secrets.nrsEmailFetch && (data.billProviders||[]).some(p=>p.active!==false)) billGmailRun({ sinceDays:60 }).catch(()=>{}); }, 60*60*1000);
+
 /* --- CSV export of products --- */
 function productsCSV(){
   const cols = ['sku','barcode','name','brand','category','subcategory','description',
@@ -3022,6 +3117,40 @@ const server = http.createServer(async (req, res)=>{
     if (url === '/api/nrs/scan' && req.method === 'POST'){
       const result = await nrsScan(true);
       return send(res,200,result);
+    }
+    // ---- Utility-bill email detection ----
+    if (url === '/api/bills/fetch' && req.method === 'POST'){
+      const b = await readBody(req).catch(()=>({}));
+      const result = await billGmailRun({ sinceDays: (b&&b.sinceDays)||90 });
+      if(result.error) return send(res,400,result);
+      return send(res,200,result);
+    }
+    if (url.split('?')[0] === '/api/bills/detections' && req.method === 'GET'){
+      const dets = Object.values(data.billDetections||{}).filter(d=>d.status==='new')
+        .sort((a,b)=> String(b.receivedAt||'').localeCompare(String(a.receivedAt||'')));
+      return send(res,200,{ providers:data.billProviders||[], detections:dets, lastRun:(data.billMeta||{}).lastRun||null });
+    }
+    if (url === '/api/bills/detection/dismiss' && req.method === 'POST'){
+      const b = await readBody(req); const d=(data.billDetections||{})[b.key];
+      if(!d) return send(res,404,{error:'not found'});
+      d.status='dismissed'; d.dismissedAt=now(); saveData();
+      return send(res,200,{ ok:true });
+    }
+    // Confirm applies the detected amount to the matching recurring bill (creates it if missing).
+    if (url === '/api/bills/detection/confirm' && req.method === 'POST'){
+      const b = await readBody(req); const d=(data.billDetections||{})[b.key];
+      if(!d) return send(res,404,{error:'not found'});
+      if(d.amount==null) return send(res,400,{error:'This bill email has no amount to confirm - enter it manually.'});
+      const mf = data.manualFinance = data.manualFinance || {}; mf.recurring = mf.recurring || [];
+      const nm = String(d.matchName||d.provider).trim().toLowerCase();
+      let it = mf.recurring.find(x=>x.book===d.book && (x.name||'').trim().toLowerCase()===nm);
+      if(it){ it.amount=d.amount; it.amountType='variable'; if(!it.provider)it.provider=d.provider; if(d.accountNo)it.accountNo=d.accountNo; if(it.active===false)it.active=true; }
+      else { it={ id:uid('rc'), book:d.book, name:d.matchName||d.provider, category:d.category||'Utilities',
+        frequency:'monthly', amount:d.amount, amountType:'variable', startDate:(d.dueDate||new Date().toISOString().slice(0,10)),
+        reminderDays:3, active:true, paused:false, provider:d.provider, accountNo:d.accountNo||'' };
+        mf.recurring.push(it); }
+      d.status='confirmed'; d.appliedTo=it.id; d.appliedAt=now(); saveData();
+      return send(res,200,{ ok:true, applied:it.name, amount:d.amount });
     }
     if (url === '/api/nrs/reset' && req.method === 'POST'){
       const b = await readBody(req).catch(()=>({}));
