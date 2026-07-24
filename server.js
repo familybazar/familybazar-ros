@@ -3169,6 +3169,7 @@ const server = http.createServer(async (req, res)=>{
     // ---- Utility-bill email detection ----
     if (url === '/api/bills/fetch' && req.method === 'POST'){
       const b = await readBody(req).catch(()=>({}));
+      if(b && b.reset){ data.billDetections={}; if(data.billMeta)data.billMeta.lastRun=null; saveData(); }  // clear + re-detect fresh
       const result = await billGmailRun({ sinceDays: (b&&b.sinceDays)||90 });
       if(result.error) return send(res,400,result);
       return send(res,200,result);

@@ -1510,12 +1510,12 @@ function financeDetectedBills(){
      ${paid.map(d=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span>${esc(d.provider)} <span class="sub">${d.paidDate?'· paid '+esc(d.paidDate):''}</span></span><b style="color:#12855a">${money2(d.amount||0)}</b></div>`).join('')}
    </div>`:'';
   return `<div class="card" style="margin-bottom:16px${dets.length?';border-color:#c9dcff':''}"><div class="bd" style="padding:14px 16px">
-     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>Bills detected from email</b><button class="btn sec sm" onclick="billScan()">Scan inbox now</button></div>
+     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>Bills detected from email</b><span style="display:flex;gap:6px"><button class="btn sec sm" onclick="billScan()">Scan inbox now</button><button class="btn sec sm" onclick="billScan(true)">Reset &amp; re-scan</button></span></div>
      ${dets.length?dets.map(row).join(''):'<div class="sub" style="padding:9px 0 2px">No bills waiting to confirm. ROS checks hourly and lists new electric / utility bills here - you confirm the amount in one tap.</div>'}
      ${paidStrip}
    </div></div>`;
 }
-async function billScan(){ toast('Scanning inbox for bills…'); try{ const r=await fetch('/api/bills/fetch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sinceDays:90})}); const j=await r.json(); if(j.error){toast(j.error);return;} await load(); render(); toast('Detected '+(j.detected||0)+' with amount'+(j.noAmount?' · '+j.noAmount+' need amount':'')); }catch(e){ toast('Scan failed'); } }
+async function billScan(reset){ toast(reset?'Clearing and re-scanning…':'Scanning inbox for bills…'); try{ const r=await fetch('/api/bills/fetch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sinceDays:180, reset:!!reset})}); const j=await r.json(); if(j.error){toast(j.error);return;} await load(); render(); toast('Detected '+(j.detected||0)+' bill(s)'+(j.payments?' · '+j.payments+' payment(s)':'')+(j.noAmount?' · '+j.noAmount+' need amount':'')); }catch(e){ toast('Scan failed'); } }
 async function billConfirm(key){ try{ const r=await fetch('/api/bills/detection/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})}); const j=await r.json(); if(j.error){toast(j.error);return;} await load(); render(); toast('Confirmed '+(j.applied||'bill')+' · '+money2(j.amount||0)); }catch(e){ toast('Confirm failed'); } }
 async function billDismiss(key){ try{ await fetch('/api/bills/detection/dismiss',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})}); await load(); render(); }catch(e){} }
 function financeOverview(){
