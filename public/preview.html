@@ -981,9 +981,9 @@ function mfRecalc(){ const m=mfDayMetrics(mfReadForm(),mfDate);
 }
 function mfSaveDay(){ const rec=mfReadForm(); rec.updatedAt=new Date().toISOString(); const mf=mfEnsure(); mf.days[mfDate]=rec; save(); mfDirty=false;
   const s=document.getElementById('mfStatus'); if(s){s.textContent='Saved · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});s.style.color='#4f8f6a';} toast('Saved '+mfDate); }
-function mfAddEmp(){ const rec=mfReadForm(); rec.general.employees=rec.general.employees||[]; rec.general.employees.push({}); mfEnsure().days[mfDate]=Object.assign({},rec); mfDirty=true; render(); }
-function mfDelEmp(i){ const rec=mfReadForm(); (rec.general.employees||[]).splice(i,1); mfEnsure().days[mfDate]=Object.assign({},rec); mfDirty=true; render(); }
-function mfAddOther(book){ const rec=mfReadForm(); const key=book==='general'?'otherExp':'otherExp'; rec[book][key]=rec[book][key]||[]; rec[book][key].push({}); mfEnsure().days[mfDate]=Object.assign({},rec); mfDirty=true; render(); }
+function mfAddEmp(){ const rec=mfReadForm(); rec.general.employees=rec.general.employees||[]; rec.general.employees.push({}); mfEnsure().days[mfDate]=Object.assign({},rec); mfPersist(); }
+function mfDelEmp(i){ const rec=mfReadForm(); (rec.general.employees||[]).splice(i,1); mfEnsure().days[mfDate]=Object.assign({},rec); mfPersist(); }
+function mfAddOther(book){ const rec=mfReadForm(); const key=book==='general'?'otherExp':'otherExp'; rec[book][key]=rec[book][key]||[]; rec[book][key].push({}); mfEnsure().days[mfDate]=Object.assign({},rec); mfPersist(); }
 function mfCaptureForm(){ if(document.getElementById('cashform')){ mfEnsure().days[mfDate]=mfReadForm(); } }
 function mfReminders(){ const t=mfTodayStr(); const mf=mfEnsure(); const over=[],due=[],up=[];
   (mf.recurring||[]).forEach(it=>{
@@ -1004,8 +1004,8 @@ function mfUnpay(id,due){ mfCaptureForm(); delete mfEnsure().payments[mfOccKey(i
 function mfSkipOcc(id,due){ mfCaptureForm(); const prev=mfOcc(id,due)||{}; mfEnsure().payments[mfOccKey(id,due)]=Object.assign({},prev,{status:'skipped',dueDate:due,confirmedBy:(typeof ME!=='undefined'&&ME&&ME.name)||'owner'}); mfDirty=false; save(); render(); toast('Skipped'); }
 function mfEditOcc(id,due){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); const cur=it?mfOccAmount(it,due):0; const v=prompt('Amount actually paid for this bill:',cur); if(v===null)return; mfCaptureForm(); mfRecordPay(id,due,v); mfDirty=false; save(); render(); }
 function mfOneRow(book,o,i){ o=o||{}; return `<div style="display:grid;grid-template-columns:1fr 110px auto;gap:8px;align-items:center;margin-bottom:6px">${mfT(book+'.oneoff.'+i+'.name',o.name,'Expense name')}${mfN(book+'.oneoff.'+i+'.amount',o.amount)}<button class="btn sec sm" onclick="mfDelOne('${book}',${i})">✕</button></div>`; }
-function mfAddOne(book){ const rec=mfReadForm(); rec[book].oneoff=rec[book].oneoff||[]; rec[book].oneoff.push({}); mfEnsure().days[mfDate]=rec; mfDirty=true; render(); }
-function mfDelOne(book,i){ const rec=mfReadForm(); (rec[book].oneoff||[]).splice(i,1); mfEnsure().days[mfDate]=rec; mfDirty=true; render(); }
+function mfAddOne(book){ const rec=mfReadForm(); rec[book].oneoff=rec[book].oneoff||[]; rec[book].oneoff.push({}); mfEnsure().days[mfDate]=rec; mfPersist(); }
+function mfDelOne(book,i){ const rec=mfReadForm(); (rec[book].oneoff||[]).splice(i,1); mfEnsure().days[mfDate]=rec; mfPersist(); }
 function mfDueRows(book){ const items=mfRecDueList(book,mfDate); if(!items.length)return '<div class="sub" style="padding:4px 0">No recurring bills due this day.</div>';
   return items.map(it=>{ const o=mfOcc(it.id,mfDate); const st=o&&o.status; const amt=mfOccAmount(it,mfDate);
     return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)">
@@ -1051,19 +1051,21 @@ function mfIcon(name,size,color){ const s=size||18,c=color||'currentColor';
 /* ---- inline handlers (edits stage in memory; the Save button persists) ---- */
 let mfSaveStamp=0;
 function mfSaveCash(){ save(); mfDirty=false; mfSaveStamp=Date.now(); render(); }
+// On Cash Entry edits stage for the Save button; anywhere else (e.g. Automated Finance) they persist now.
+function mfPersist(){ if(active==='cashentry'){ mfDirty=true; } else { save(); mfDirty=false; mfSaveStamp=Date.now(); } render(); }
 function mfSaveStatus(){ if(mfDirty) return 'Unsaved changes'; if(mfSaveStamp) return 'Saved '+fTimeAgo(mfSaveStamp); return 'All changes saved'; }
 function mfSetDay(book,field,v){ const mf=mfEnsure(); const rec=mf.days[mfDate]||(mf.days[mfDate]={general:{},phone:{}});
   const num=(v===''?'':Number(v));
   if(book==='phone'){ rec.phone=rec.phone||{}; if(field==='gpPct')rec.phone.gpPct=num; else {rec.phone.sales=rec.phone.sales||{}; rec.phone.sales[field]=num;} }
   else { rec.general=rec.general||{}; rec.general[field]=num; }
-  rec.updatedAt=new Date().toISOString(); mfDirty=true; render(); }
-function mfExpSetAmt(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.amount=Number(v)||0; mfDirty=true; render(); }
-function mfExpSetFreq(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.frequency=v; if(!it.startDate)it.startDate=mfTodayStr(); mfDirty=true; render(); }
-function mfExpRename(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.name=v; mfDirty=true; }
+  rec.updatedAt=new Date().toISOString(); mfPersist(); }
+function mfExpSetAmt(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.amount=Number(v)||0; mfPersist(); }
+function mfExpSetFreq(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.frequency=v; if(!it.startDate)it.startDate=mfTodayStr(); mfPersist(); }
+function mfExpRename(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.name=v; mfPersist(); }
 function mfExpAdd(book,freq){ recPrefill={book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:'',startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true}; mfRecModal(); }
-function mfExpRemove(id){ if(!confirm('Remove this expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=(mf.recurring||[]).filter(x=>x.id!==id); mfDirty=true; render(); }
+function mfExpRemove(id){ if(!confirm('Remove this expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=(mf.recurring||[]).filter(x=>x.id!==id); mfPersist(); }
 // Toggle a bill's paid status inline from its status badge (stages; Save persists).
-function mfCashTogglePaid(id,nd){ const key=mfOccKey(id,nd); const mf=mfEnsure(); const o=mf.payments[key]; if(o&&o.status==='paid'){ delete mf.payments[key]; } else { mfRecordPay(id,nd,null); } mfDirty=true; render(); }
+function mfCashTogglePaid(id,nd){ const key=mfOccKey(id,nd); const mf=mfEnsure(); const o=mf.payments[key]; if(o&&o.status==='paid'){ delete mf.payments[key]; } else { mfRecordPay(id,nd,null); } mfPersist(); }
 // Prepared common-bill catalog per book+frequency - owner just fills amount/due/paid (no modal).
 const MF_PRESETS={
   general:{ daily:[], weekly:['Employee Pay'], biweekly:['Employee Pay'],
@@ -1074,11 +1076,11 @@ const MF_PRESETS={
 };
 function mfFindExp(book,name,freq){ return (mfEnsure().recurring||[]).find(x=>x.book===book&&(x.name||'').trim().toLowerCase()===String(name).trim().toLowerCase()&&x.frequency===freq); }
 function mfExpEnsure(book,name,freq){ let it=mfFindExp(book,name,freq); if(!it){ it={id:uid('rc'),book,name,category:'Other',frequency:freq,amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}; mfEnsure().recurring.push(it); } return it; }
-function mfPresetAmt(book,name,freq,v){ const num=Number(v)||0; let it=mfFindExp(book,name,freq); if(!it){ if(!num)return; it=mfExpEnsure(book,name,freq); } it.preset=it.preset||name; it.amount=num; mfDirty=true; render(); }
-function mfPresetDue(book,name,freq,v){ if(!v)return; const it=mfExpEnsure(book,name,freq); it.preset=it.preset||name; it.startDate=v; mfDirty=true; render(); }
-function mfExpSetDue(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(it&&v)it.startDate=v; mfDirty=true; render(); }
-function mfExpAddInline(book,freq){ mfEnsure().recurring.push({id:uid('rc'),book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}); mfDirty=true; render(); }
-function mfPresetRename(book,presetName,freq,newName){ const nm=(newName||'').trim(); const it=mfExpEnsure(book,presetName,freq); it.preset=it.preset||presetName; it.name=nm||presetName; mfDirty=true; render(); }
+function mfPresetAmt(book,name,freq,v){ const num=Number(v)||0; let it=mfFindExp(book,name,freq); if(!it){ if(!num)return; it=mfExpEnsure(book,name,freq); } it.preset=it.preset||name; it.amount=num; mfPersist(); }
+function mfPresetDue(book,name,freq,v){ if(!v)return; const it=mfExpEnsure(book,name,freq); it.preset=it.preset||name; it.startDate=v; mfPersist(); }
+function mfExpSetDue(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(it&&v)it.startDate=v; mfPersist(); }
+function mfExpAddInline(book,freq){ mfEnsure().recurring.push({id:uid('rc'),book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}); mfPersist(); }
+function mfPresetRename(book,presetName,freq,newName){ const nm=(newName||'').trim(); const it=mfExpEnsure(book,presetName,freq); it.preset=it.preset||presetName; it.name=nm||presetName; mfPersist(); }
 /* ---- Global bills-due popover (top notification, redirectable) ---- */
 function mfToggleBell(){ mfBellOpen=!mfBellOpen; render(); }
 function mfBellHtml(){ const r=mfReminders(); const n=r.over.length+r.due.length; const rows=[...r.over.map(o=>['Overdue',o]),...r.due.map(o=>['Due today',o])];
@@ -1189,6 +1191,51 @@ function mfCashCSS(){ return `<style>
     .mf-x{grid-column:2/3;justify-self:end;margin-top:-4px}
   }
   </style>`; }
+/* Shared prepared-expense table (Expense | Amount | Status) used by BOTH Cash Entry and Automated Finance. */
+function mfExpenseTable(book, period){
+  period=period||'monthly'; const per=mfPeriodWord(period); const mf=mfEnsure();
+  const items=(mf.recurring||[]).filter(it=>it.book===book&&!it.paused);
+  const cur=mfExpTab[book]||'monthly';
+  const tabs=[['daily','Daily'],['weekly','Weekly'],['biweekly','Bi-weekly'],['monthly','Monthly'],['yearly','Yearly'],['once','One-time']];
+  const dotFor=f=>{ const ex=items.filter(it=>it.frequency===f);
+     const due=f==='daily'?false:ex.some(it=>{ if(!(Number(it.amount)>0))return false; const nd=mfNextDue(it); if(!nd)return false; const o=mfOcc(it.id,nd); if(o&&(o.status==='paid'||o.status==='skipped'))return false; return nd<=mfTodayStr(); });
+     if(due)return true;
+     const filled=new Set(); ex.forEach(it=>{ if(Number(it.amount)>0){ filled.add((it.name||'').trim().toLowerCase()); if(it.preset)filled.add(it.preset.trim().toLowerCase()); } });
+     const presetsMissing=((MF_PRESETS[book]||{})[f]||[]).some(nm=>!filled.has(nm.toLowerCase()));
+     const existingBlank=ex.some(it=>(it.name||'').trim() && !(Number(it.amount)>0));
+     return presetsMissing||existingBlank; };
+  const tabBtns=tabs.map(t=>`<button class="mf-etab${cur===t[0]?' on':''}" onclick="mfExpTab.${book}='${t[0]}';render()">${t[1]}${dotFor(t[0])?'<span class="mf-dot"></span>':''}</button>`).join('');
+  const statusCell=(it,freq)=>{
+     if(freq==='daily') return `<span class="mf-badge perday"><span class="d"></span>${it&&Number(it.amount)>0?'Per day':'Enter amount'}</span>`;
+     if(!it||!(Number(it.amount)>0)) return `<span class="mf-badge wait"><span class="d"></span>Enter amount</span>`;
+     const nd=mfNextDue(it); const o=nd?mfOcc(it.id,nd):null; const paid=o&&o.status==='paid';
+     if(!nd) return `<span class="mf-badge wait"><span class="d"></span>-</span>`;
+     if(paid){ const pt=o.paidDate?(' '+new Date(o.paidDate+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})):''; return `<button class="mf-badge paid" onclick="mfCashTogglePaid('${it.id}','${nd}')"><span class="d"></span>Paid${pt}</button>`; }
+     return `<button class="mf-badge due" onclick="mfCashTogglePaid('${it.id}','${nd}')"><span class="d"></span>Due</button>`; };
+  const rowFor=(it,presetName,freq)=>{
+     const amtVal=it&&it.amount?it.amount:'';
+     const nameCell=it
+       ?`<input class="mf-expname" value="${esc(it.name||'')}" placeholder="Expense name" onchange="mfExpRename('${it.id}',this.value)">`
+       :`<input class="mf-expname" value="${esc(presetName)}" data-p="${esc(presetName)}" onchange="mfPresetRename('${book}',this.dataset.p,'${freq}',this.value)">`;
+     const amtOn=it?`mfExpSetAmt('${it.id}',this.value)`:`mfPresetAmt('${book}',this.dataset.n,'${freq}',this.value)`;
+     const dataN=it?'':` data-n="${esc(presetName)}"`;
+     const del=it?`<button class="mf-x" onclick="mfExpRemove('${it.id}')">${mfIcon('trash',15,'#9aa1ad')}</button>`:`<span></span>`;
+     return `<div class="mf-exprow2">
+        <div class="mf-namewrap">${nameCell}</div>
+        <div class="mf-amtin"><span>$</span><input type="number" inputmode="decimal" step="0.01"${dataN} value="${amtVal}" placeholder="0" onchange="${amtOn}"></div>
+        ${statusCell(it,freq)}${del}
+     </div>`; };
+  const existing=items.filter(it=>it.frequency===cur);
+  const used=new Set(); existing.forEach(it=>{ used.add((it.name||'').trim().toLowerCase()); if(it.preset)used.add(it.preset.trim().toLowerCase()); });
+  const presets=((MF_PRESETS[book]||{})[cur]||[]).filter(nm=>!used.has(nm.toLowerCase()));
+  let rowsHtml=existing.map(it=>rowFor(it,null,cur)).join('')+presets.map(nm=>rowFor(null,nm,cur)).join('');
+  if(!rowsHtml) rowsHtml=`<div class="sub" style="padding:8px 2px">No ${mfFreqLabel(cur).toLowerCase()} expenses yet. Add one below.</div>`;
+  return `<div class="mf-sec"><span>Expenses</span><span class="amt">${money2(mfExpPeriodTotal(book,period))} / ${per}</span></div>
+    <div class="mf-etabs">${tabBtns}</div>
+    <div class="mf-exphead"><span>Expense</span><span>Amount</span><span>Status</span><span></span></div>
+    ${rowsHtml}
+    <button class="mf-addbtn" onclick="mfExpAddInline('${book}','${cur}')">${mfIcon('plus',14,'#4f6ef7')} Add custom expense</button>`;
+}
 function viewCashEntry(){
   if(!mfBeforeBound){ window.addEventListener('beforeunload',e=>{ if(mfDirty){e.preventDefault();e.returnValue='';} }); mfBeforeBound=true; }
   const mf=mfEnsure(); const rec=mf.days[mfDate]||{general:{},phone:{}}; const g=rec.general||{}, p=rec.phone||{}; const ps=p.sales||{};
@@ -1214,48 +1261,6 @@ function viewCashEntry(){
   const phFields=[['phone','Phone sales'],['accessory','Accessory sales'],['repair','Repair income'],['service','Other service income'],['otherSales','Other sales']];
   const salesPhone=`<div>${phFields.map(f=>`<div class="mf-salesrow"><span class="lab">${f[1]}</span>${inpMoney('phone',f[0],ps[f[0]])}</div>`).join('')}
      <div class="mf-salesrow"><span class="lab">Profit %</span>${inpPct('phone',p.gpPct)}</div></div>`;
-  const expBlock=(book)=>{ const items=(mf.recurring||[]).filter(it=>it.book===book&&!it.paused);
-     const cur=mfExpTab[book]||'monthly';
-     const tabs=[['daily','Daily'],['weekly','Weekly'],['biweekly','Bi-weekly'],['monthly','Monthly'],['yearly','Yearly'],['once','One-time']];
-     // red dot: something to fill in (a listed bill without an amount) OR a bill due & unpaid
-     const dotFor=f=>{ const ex=items.filter(it=>it.frequency===f);
-        const due=f==='daily'?false:ex.some(it=>{ if(!(Number(it.amount)>0))return false; const nd=mfNextDue(it); if(!nd)return false; const o=mfOcc(it.id,nd); if(o&&(o.status==='paid'||o.status==='skipped'))return false; return nd<=mfTodayStr(); });
-        if(due)return true;
-        const filled=new Set(); ex.forEach(it=>{ if(Number(it.amount)>0){ filled.add((it.name||'').trim().toLowerCase()); if(it.preset)filled.add(it.preset.trim().toLowerCase()); } });
-        const presetsMissing=((MF_PRESETS[book]||{})[f]||[]).some(nm=>!filled.has(nm.toLowerCase()));
-        const existingBlank=ex.some(it=>(it.name||'').trim() && !(Number(it.amount)>0));
-        return presetsMissing||existingBlank; };
-     const tabBtns=tabs.map(t=>`<button class="mf-etab${cur===t[0]?' on':''}" onclick="mfExpTab.${book}='${t[0]}';render()">${t[1]}${dotFor(t[0])?'<span class="mf-dot"></span>':''}</button>`).join('');
-     const statusCell=(it,freq)=>{
-        if(freq==='daily') return `<span class="mf-badge perday"><span class="d"></span>${it&&Number(it.amount)>0?'Per day':'Enter amount'}</span>`;
-        if(!it||!(Number(it.amount)>0)) return `<span class="mf-badge wait"><span class="d"></span>Enter amount</span>`;
-        const nd=mfNextDue(it); const o=nd?mfOcc(it.id,nd):null; const paid=o&&o.status==='paid';
-        if(!nd) return `<span class="mf-badge wait"><span class="d"></span>-</span>`;
-        if(paid){ const pt=o.paidDate?(' '+new Date(o.paidDate+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})):''; return `<button class="mf-badge paid" onclick="mfCashTogglePaid('${it.id}','${nd}')"><span class="d"></span>Paid${pt}</button>`; }
-        return `<button class="mf-badge due" onclick="mfCashTogglePaid('${it.id}','${nd}')"><span class="d"></span>Due</button>`; };
-     const rowFor=(it,presetName,freq)=>{
-        const amtVal=it&&it.amount?it.amount:'';
-        const nameCell=it
-          ?`<input class="mf-expname" value="${esc(it.name||'')}" placeholder="Expense name" onchange="mfExpRename('${it.id}',this.value)">`
-          :`<input class="mf-expname" value="${esc(presetName)}" data-p="${esc(presetName)}" onchange="mfPresetRename('${book}',this.dataset.p,'${freq}',this.value)">`;
-        const amtOn=it?`mfExpSetAmt('${it.id}',this.value)`:`mfPresetAmt('${book}',this.dataset.n,'${freq}',this.value)`;
-        const dataN=it?'':` data-n="${esc(presetName)}"`;
-        const del=it?`<button class="mf-x" onclick="mfExpRemove('${it.id}')">${mfIcon('trash',15,'#9aa1ad')}</button>`:`<span></span>`;
-        return `<div class="mf-exprow2">
-           <div class="mf-namewrap">${nameCell}</div>
-           <div class="mf-amtin"><span>$</span><input type="number" inputmode="decimal" step="0.01"${dataN} value="${amtVal}" placeholder="0" onchange="${amtOn}"></div>
-           ${statusCell(it,freq)}${del}
-        </div>`; };
-     const existing=items.filter(it=>it.frequency===cur);
-     const used=new Set(); existing.forEach(it=>{ used.add((it.name||'').trim().toLowerCase()); if(it.preset)used.add(it.preset.trim().toLowerCase()); });
-     const presets=((MF_PRESETS[book]||{})[cur]||[]).filter(nm=>!used.has(nm.toLowerCase()));
-     let rowsHtml=existing.map(it=>rowFor(it,null,cur)).join('')+presets.map(nm=>rowFor(null,nm,cur)).join('');
-     if(!rowsHtml) rowsHtml=`<div class="sub" style="padding:8px 2px">No ${mfFreqLabel(cur).toLowerCase()} expenses yet. Add one below.</div>`;
-     return `<div class="mf-sec"><span>Expenses</span><span class="amt">${money2(mfExpPeriodTotal(book,period))} / ${per}</span></div>
-       <div class="mf-etabs">${tabBtns}</div>
-       <div class="mf-exphead"><span>Expense</span><span>Amount</span><span>Status</span><span></span></div>
-       ${rowsHtml}
-       <button class="mf-addbtn" onclick="mfExpAddInline('${book}','${cur}')">${mfIcon('plus',14,'#4f6ef7')} Add custom expense</button>`; };
   const bookCard=(book)=>{ const c=mfEstCompute(book,period); const isPhone=book==='phone';
      return `<div class="mf-book">
        <div class="mf-bookhd"><span class="mf-bookicon ${book}">${mfIcon(isPhone?'phone':'store',18,isPhone?'#4f6ef7':'#12855a')}</span><span class="mf-booktitle">${isPhone?'Phone Cash':'General Cash'}</span><span class="mf-booktag">${isPhone?'Phones & electronics':'Store'}</span></div>
@@ -1270,7 +1275,7 @@ function viewCashEntry(){
        </div>
        <div class="mf-sec" style="margin-top:0"><span>Today's sales</span></div>
        ${isPhone?salesPhone:salesGeneral}
-       ${expBlock(book)}
+       ${mfExpenseTable(book,period)}
      </div>`; };
   const header=`<div class="mf-top">
      <div><h1 class="mf-h1">Manual Finance Entry</h1><div class="mf-subt">Daily cash worksheet</div></div>
@@ -1537,19 +1542,24 @@ function financeOverview(){
   </div>`;
 }
 function financeExpenses(){
-  const X=S.expenses||[];const monthlyFixed=X.filter(x=>x.recurring&&x.type==='fixed').reduce((s,x)=>s+(x.amount||0),0);
-  const monthlyVar=X.filter(x=>x.recurring&&x.type==='variable').reduce((s,x)=>s+(x.amount||0),0);
-  const monthlyAll=monthlyFixed+monthlyVar;
-  return `<div class="kpis">
-    <div class="kpi"><div class="t">Monthly fixed</div><div class="v">${money(monthlyFixed)}</div></div>
-    <div class="kpi"><div class="t">Monthly variable</div><div class="v">${money(monthlyVar)}</div></div>
-    <div class="kpi"><div class="t">Monthly total</div><div class="v">${money(monthlyAll)}</div><div class="s">${money(monthlyAll*12)} / yr</div></div>
-    <div class="kpi"><div class="t">Line items</div><div class="v">${X.length}</div></div>
-   </div>
-   <div style="display:flex;justify-content:flex-end;margin:12px 0"><button class="btn" onclick="editExpense()">+ Add expense</button></div>
-   <div class="card"><div class="bd" style="padding:2px 14px"><div style="overflow:auto"><table><thead><tr><th>Expense</th><th>Category</th><th>Type</th><th>Frequency</th><th class="right">Amount</th><th></th></tr></thead><tbody>
-    ${X.length?X.map(x=>`<tr><td style="font-weight:600">${esc(x.name)}</td><td class="sub">${esc(x.category||'-')}</td><td>${x.type==='fixed'?'<span class="pill over">Fixed</span>':'<span class="pill low">Variable</span>'}</td><td class="sub">${x.recurring?'Monthly':(x.date?new Date(x.date).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'One-time')}</td><td class="right" style="font-weight:600">${money(x.amount||0)}${x.recurring?'<span class="sub" style="font-weight:400">/mo</span>':''}</td><td class="right"><button class="btn sec sm" onclick="editExpense('${x.id}')">Edit</button></td></tr>`).join(''):`<tr><td colspan="6" class="sub" style="padding:26px;text-align:center">No expenses yet. Add rent, utilities (Con Ed), payroll, insurance, POS/software fees, maintenance, repairs, card fees…</td></tr>`}
-   </tbody></table></div></div></div>`;
+  const mf=mfEnsure(); const list=(mf.recurring||[]).filter(it=>it.active!==false&&!it.paused);
+  const cyc=f=>f==='daily'?1:f==='weekly'?7:f==='biweekly'?14:f==='monthly'?30:f==='yearly'?365:0;
+  const monthlyOf=it=>{ const a=Number(it.amount)||0; if(!a)return 0; if(it.frequency==='once')return 0; const cd=cyc(it.frequency); return cd>0?(a/cd)*30:0; };
+  let fixed=0,variable=0; list.forEach(it=>{ const m=monthlyOf(it); if(!m)return; if(it.amountType==='variable')variable+=m; else fixed+=m; });
+  const total=fixed+variable; const count=list.filter(it=>Number(it.amount)>0).length;
+  return `${mfCashCSS()}<div class="mf-wrap">
+    <div class="mf-kpis" style="margin-bottom:14px">
+      <div class="mf-kpi"><div class="k">Monthly fixed</div><div class="v">${money2(fixed)}</div></div>
+      <div class="mf-kpi"><div class="k">Monthly variable</div><div class="v">${money2(variable)}</div></div>
+      <div class="mf-kpi net"><div class="k">Monthly total</div><div class="v">${money2(total)}</div></div>
+      <div class="mf-kpi"><div class="k">Active bills</div><div class="v">${count}</div></div>
+    </div>
+    <div class="sub" style="margin:0 0 16px">Same bills as Cash Entry - one backbone. Fill the amount and ROS handles scheduling, reminders and totals. Variable bills (electric, gas) auto-fill from email when detected.</div>
+    <div class="mf-books">
+      <div class="mf-book"><div class="mf-bookhd"><span class="mf-bookicon general">${mfIcon('store',18,'#12855a')}</span><span class="mf-booktitle">General Cash</span><span class="mf-booktag">Store</span></div>${mfExpenseTable('general','monthly')}</div>
+      <div class="mf-book"><div class="mf-bookhd"><span class="mf-bookicon phone">${mfIcon('phone',18,'#4f6ef7')}</span><span class="mf-booktitle">Phone Cash</span><span class="mf-booktag">Phones & electronics</span></div>${mfExpenseTable('phone','monthly')}</div>
+    </div>
+   </div>`;
 }
 function financeTax(){const a=salesAgg(salesRangeKey);
   return `<div class="kpis">
