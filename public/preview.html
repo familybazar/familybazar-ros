@@ -2499,6 +2499,7 @@ function render(){
     bar.appendChild(b); return b; }
   var installBtn=mkBtn('Install app','#123B8F');
   var alertBtn  =mkBtn('Turn on alerts','#0A2540');
+  var testBtn   =mkBtn('Send test alert','#1E8A3C');
 
   // ---- Install ----
   var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
@@ -2513,19 +2514,29 @@ function render(){
   function b64ToU8(base64){ var pad='='.repeat((4-base64.length%4)%4); var s=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');
     var raw=atob(s); var out=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i); return out; }
   var pushOk = ('PushManager' in window) && ('Notification' in window);
-  if(pushOk && Notification.permission==='default') alertBtn.style.display='block';
+  async function subscribePush(){
+    var reg=await navigator.serviceWorker.ready;
+    var vr=await fetch('/api/push/vapid'); var vd=await vr.json();
+    if(!vd || !vd.key){ alert('Push is not configured on the server yet.'); return false; }
+    var existing=await reg.pushManager.getSubscription();
+    var sub=existing || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToU8(vd.key) });
+    await fetch('/api/push/subscribe',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(sub) });
+    return true;
+  }
+  if(pushOk){
+    if(Notification.permission==='default') alertBtn.style.display='block';
+    else if(Notification.permission==='granted'){ subscribePush().then(function(ok){ if(ok) testBtn.style.display='block'; }).catch(function(){}); }
+  }
   alertBtn.addEventListener('click', async function(){
     alertBtn.style.display='none';
     try{
       var perm=await Notification.requestPermission();
       if(perm!=='granted'){ return; }
-      var reg=await navigator.serviceWorker.ready;
-      var vr=await fetch('/api/push/vapid'); var vd=await vr.json();
-      if(!vd || !vd.key){ alert('Push is not configured on the server yet.'); return; }
-      var existing=await reg.pushManager.getSubscription();
-      var sub=existing || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToU8(vd.key) });
-      await fetch('/api/push/subscribe',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(sub) });
+      if(await subscribePush()) testBtn.style.display='block';
     }catch(e){ console.warn('push enable failed',e); }
+  });
+  testBtn.addEventListener('click', async function(){
+    try{ await fetch('/api/push/test',{ method:'POST' }); }catch(e){ console.warn('test push failed',e); }
   });
 })();
 </script>
