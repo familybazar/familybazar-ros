@@ -1449,7 +1449,18 @@ function viewFinanceCompare(){
 function pnlRow(label,val,strong){const neg=val<0;return `<div class="drow" style="${strong?'font-weight:700;':''}"><span>${esc(label)}</span><b style="color:${neg?'#b56a6a':'#161a26'}">${neg?'−'+money(-val):money(val)}</b></div>`}
 /* ---- Bills detected from email (Con Edison etc.): confirm the amount in one tap ---- */
 function financeDetectedBills(){
-  const dets=Object.values(S.billDetections||{}).filter(d=>d&&d.status==='new').sort((a,b)=>String(b.receivedAt||'').localeCompare(String(a.receivedAt||'')));
+  let all=Object.values(S.billDetections||{}).filter(d=>d&&d.status==='new');
+  // A utility sends several emails per cycle (bill ready, reminder, autopay). Collapse to one row per
+  // actual bill: group amount-bearing emails by provider+amount (keep the one that also has a due date);
+  // group amount-less notices by provider+month, and drop them when that provider already has an amount.
+  const score=d=>(d.amount!=null?2:0)+(d.dueDate?1:0);
+  const groups={};
+  all.forEach(d=>{ const k=d.amount!=null ? (d.providerId+'|a'+Math.round(Number(d.amount))) : (d.providerId+'|m'+String(d.receivedAt||'').slice(0,7));
+    if(!groups[k] || score(d)>score(groups[k]) || (score(d)===score(groups[k]) && String(d.receivedAt)>String(groups[k].receivedAt))) groups[k]=d; });
+  let dets=Object.values(groups);
+  const provHasAmount=new Set(dets.filter(d=>d.amount!=null).map(d=>d.providerId));
+  dets=dets.filter(d=>d.amount!=null || !provHasAmount.has(d.providerId));
+  dets.sort((a,b)=>String(b.dueDate||b.receivedAt||'').localeCompare(String(a.dueDate||a.receivedAt||'')));
   const row=d=>{ const has=d.amount!=null;
     return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:11px 0;border-top:1px solid var(--line)">
        <div><b>${esc(d.provider)}</b> <span class="sub">${esc(d.matchName||'')}${d.dueDate?' · due '+esc(d.dueDate):''}${d.invoiceNo?' · #'+esc(d.invoiceNo):''}</span></div>

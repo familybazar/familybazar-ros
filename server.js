@@ -3149,7 +3149,17 @@ const server = http.createServer(async (req, res)=>{
         frequency:'monthly', amount:d.amount, amountType:'variable', startDate:(d.dueDate||new Date().toISOString().slice(0,10)),
         reminderDays:3, active:true, paused:false, provider:d.provider, accountNo:d.accountNo||'' };
         mf.recurring.push(it); }
-      d.status='confirmed'; d.appliedTo=it.id; d.appliedAt=now(); saveData();
+      d.status='confirmed'; d.appliedTo=it.id; d.appliedAt=now();
+      // Collapse the other emails for the same bill (reminder/autopay/duplicate) so they stop showing.
+      const amtR=Math.round(Number(d.amount));
+      for(const k in data.billDetections){ const o=data.billDetections[k];
+        if(!o || o===d || o.status!=='new' || o.providerId!==d.providerId) continue;
+        const sameAmt=(o.amount!=null && Math.round(Number(o.amount))===amtR);
+        const sameDue=(o.dueDate && d.dueDate && o.dueDate===d.dueDate);
+        const amountless=(o.amount==null && String(o.receivedAt||'').slice(0,7)===String(d.receivedAt||'').slice(0,7));
+        if(sameAmt||sameDue||amountless){ o.status='dismissed'; o.dismissedAt=now(); o.dismissedBy='confirm-sibling'; }
+      }
+      saveData();
       return send(res,200,{ ok:true, applied:it.name, amount:d.amount });
     }
     if (url === '/api/nrs/reset' && req.method === 'POST'){
