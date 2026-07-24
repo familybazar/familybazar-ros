@@ -1785,6 +1785,32 @@ async function billExtract(bodyText, providerName){
   return { kind:(obj.kind||'bill'), amount:isFinite(amt)?amt:null, dueDate:obj.dueDate||null, paidDate:obj.paidDate||null,
     invoiceNo:obj.invoiceNo||null, accountNo:obj.accountNo||null, amountFound:!!obj.amountFound };
 }
+// Pull PDF attachments (invoice/receipt) out of a raw message for the vision fallback.
+function extractPdfAttachments(raw){
+  const out=[];
+  function walk(section){
+    const sep=section.indexOf('\r\n\r\n'); if(sep<0) return;
+    const head=section.slice(0,sep); const body=section.slice(sep+4); const h=mimeHeaders(head);
+    if(/multipart\//i.test(h.ctype)&&h.boundary){ for(let p of body.split('--'+h.boundary)){ p=p.replace(/^\r\n/,'').replace(/\r\n$/,''); if(!p||p==='--')continue; walk(p); } return; }
+    if(/application\/pdf/i.test(h.ctype)||/\.pdf$/i.test(h.fname||'')){
+      let buf; try{ if(h.enc==='base64') buf=Buffer.from(body.replace(/\s+/g,''),'base64'); else if(h.enc==='quoted-printable') buf=Buffer.from(decodeQP(body),'binary'); else buf=Buffer.from(body,'binary'); }catch(e){ return; }
+      if(buf&&buf.length>200) out.push({ filename:h.fname||'invoice.pdf', buf });
+    }
+  }
+  walk(raw); return out;
+}
+async function billExtractPdf(b64, providerName){
+  const prompt='This is an invoice or receipt PDF for a small store from '+(providerName||'a vendor')+'. Return ONLY compact JSON with keys: '
+    +'kind ("bill" if an amount is DUE / it is an invoice or statement; "payment" if it is a receipt / payment confirmation; "other"), '
+    +'amount (number in USD; null if none), dueDate (YYYY-MM-DD or null), paidDate (YYYY-MM-DD or null), '
+    +'invoiceNo (string or null), accountNo (string or null), amountFound (true if a dollar amount is present). Never guess.';
+  let raw; try{ raw=await aiVision([{mime:'application/pdf', b64}], prompt, 400); }catch(e){ return { error:'vision: '+(e&&e.message||e) }; }
+  const m=(raw||'').match(/\{[\s\S]*\}/); if(!m) return { error:'no json' };
+  let obj; try{ obj=JSON.parse(m[0]); }catch(e){ return { error:'bad json' }; }
+  const amt=(obj.amount!=null&&obj.amountFound)?Number(String(obj.amount).replace(/[^0-9.\-]/g,'')):null;
+  return { kind:(obj.kind||'bill'), amount:isFinite(amt)?amt:null, dueDate:obj.dueDate||null, paidDate:obj.paidDate||null,
+    invoiceNo:obj.invoiceNo||null, accountNo:obj.accountNo||null, amountFound:!!obj.amountFound };
+}
 // Canonical monthly occurrence date for a bill (its due-day within the month of dateStr), so bill-ready and
 // payment emails for the same month land on the SAME occurrence and align with date-wise expense generation.
 // The usage/service month a bill belongs to = its due month minus the provider's lag (default 1 month),
@@ -1859,9 +1885,18 @@ function billGmailRun(opts){
             if(prov.subjectMatch && !subject.toLowerCase().includes(prov.subjectMatch.toLowerCase())) continue;
             const key=prov.id+'|'+(messageId||('uid:'+uid));
             if(data.billDetections[key]){ log.skippedDuplicate++; continue; }   // already seen this bill email
-            const b=nrsExtractBodies(msg); const bodyText=(b.text||'').replace(/<[^>]+>/g,' ') || nrsStripHtml(b.html);
+            const b=nrsExtractBodies(msg);
+            // Include BOTH the plain-text and the HTML text - some senders (e.g. Supabase) put the amount
+            // only in the HTML while the plain-text part is just a "view invoice" link.
+            const bodyText=[(b.text||'').replace(/<[^>]+>/g,' '), nrsStripHtml(b.html)].filter(s=>s&&s.trim()).join('\n');
             const dateHdr=nrsHeaderVal(msg,'date'); const receivedMs=dateHdr?(Date.parse(dateHdr)||Date.now()):Date.now();
             let ext; try{ ext=await billExtract(bodyText, prov.name); }catch(e){ ext={error:String(e&&e.message||e)}; }
+            // Fallback: if the email body has no amount, read the attached PDF invoice/receipt with the vision model.
+            if((!ext || ext.amount==null) && (secrets.aiApiKey||'').trim()){
+              try{ const pdfs=extractPdfAttachments(msg);
+                if(pdfs.length){ const pe=await billExtractPdf(pdfs[0].buf.toString('base64'), prov.name); if(pe && pe.amount!=null) ext=Object.assign({}, ext||{}, pe); }
+              }catch(e){}
+            }
             const recvDay=new Date(receivedMs).toISOString().slice(0,10);
             const hasAmt=!!(ext&&ext.amount!=null);
             // PAYMENT / receipt email -> auto-mark the matching bill occurrence paid (a receipt is factual).
