@@ -1086,7 +1086,11 @@ function mfExpSetAmt(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===i
 function mfExpSetFreq(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.frequency=v; if(!it.startDate)it.startDate=mfTodayStr(); mfPersist(); }
 function mfExpRename(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.name=v; mfPersist(); }
 function mfExpAdd(book,freq){ recPrefill={book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:'',startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true}; mfRecModal(); }
-function mfExpRemove(id){ if(!confirm('Remove this expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=(mf.recurring||[]).filter(x=>x.id!==id); mfPersist(); }
+function mfHidden(){ const s=mfEnsure().settings; s.hiddenPresets=Array.isArray(s.hiddenPresets)?s.hiddenPresets:[]; return s.hiddenPresets; }
+function mfPresetKey(book,freq,name){ return book+'|'+freq+'|'+String(name).trim().toLowerCase(); }
+function mfPresetHidden(book,freq,name){ return mfHidden().indexOf(mfPresetKey(book,freq,name))>=0; }
+function mfPresetHide(book,name,freq){ if(!confirm('Remove "'+name+'" from this list? You can add it back later with Add custom expense.'))return; const k=mfPresetKey(book,freq,name); const h=mfHidden(); if(h.indexOf(k)<0)h.push(k); mfPersist(); }
+function mfExpRemove(id){ if(!confirm('Remove this expense? Its payment history is kept.'))return; const mf=mfEnsure(); const it=(mf.recurring||[]).find(x=>x.id===id); if(it){ const nm=(it.preset||it.name||'').trim(); const pl=(MF_PRESETS[it.book]||{})[it.frequency]||[]; if(nm && pl.some(p=>p.toLowerCase()===nm.toLowerCase())){ const h=mfHidden(); const k=mfPresetKey(it.book,it.frequency,nm); if(h.indexOf(k)<0)h.push(k); } } mf.recurring=(mf.recurring||[]).filter(x=>x.id!==id); mfPersist(); }
 // Toggle a bill's paid status inline from its status badge (stages; Save persists).
 function mfCashTogglePaid(id,nd){ const key=mfOccKey(id,nd); const mf=mfEnsure(); const o=mf.payments[key]; if(o&&o.status==='paid'){ delete mf.payments[key]; } else { mfRecordPay(id,nd,null); } mfPersist(); }
 // Prepared common-bill catalog per book+frequency - owner just fills amount/due/paid (no modal).
@@ -1224,7 +1228,7 @@ function mfExpenseTable(book, period){
      const due=f==='daily'?false:ex.some(it=>{ if(!(Number(it.amount)>0))return false; const nd=mfNextDue(it); if(!nd)return false; const o=mfOcc(it.id,nd); if(o&&(o.status==='paid'||o.status==='skipped'))return false; return nd<=mfTodayStr(); });
      if(due)return true;
      const filled=new Set(); ex.forEach(it=>{ if(Number(it.amount)>0){ filled.add((it.name||'').trim().toLowerCase()); if(it.preset)filled.add(it.preset.trim().toLowerCase()); } });
-     const presetsMissing=((MF_PRESETS[book]||{})[f]||[]).some(nm=>!filled.has(nm.toLowerCase()));
+     const presetsMissing=((MF_PRESETS[book]||{})[f]||[]).filter(nm=>!mfPresetHidden(book,f,nm)).some(nm=>!filled.has(nm.toLowerCase()));
      const existingBlank=ex.some(it=>(it.name||'').trim() && !(Number(it.amount)>0));
      return presetsMissing||existingBlank; };
   const tabBtns=tabs.map(t=>`<button class="mf-etab${cur===t[0]?' on':''}" onclick="mfExpTab.${book}='${t[0]}';render()">${t[1]}${dotFor(t[0])?'<span class="mf-dot"></span>':''}</button>`).join('');
@@ -1242,7 +1246,7 @@ function mfExpenseTable(book, period){
        :`<input class="mf-expname" value="${esc(presetName)}" data-p="${esc(presetName)}" onchange="mfPresetRename('${book}',this.dataset.p,'${freq}',this.value)">`;
      const amtOn=it?`mfExpSetAmt('${it.id}',this.value)`:`mfPresetAmt('${book}',this.dataset.n,'${freq}',this.value)`;
      const dataN=it?'':` data-n="${esc(presetName)}"`;
-     const del=it?`<button class="mf-x" onclick="mfExpRemove('${it.id}')">${mfIcon('trash',15,'#9aa1ad')}</button>`:`<span></span>`;
+     const del=it?`<button class="mf-x" onclick="mfExpRemove('${it.id}')">${mfIcon('trash',15,'#9aa1ad')}</button>`:`<button class="mf-x" title="Remove this row" onclick="mfPresetHide('${book}',this.dataset.p,'${freq}')" data-p="${esc(presetName)}">${mfIcon('trash',15,'#9aa1ad')}</button>`;
      return `<div class="mf-exprow2">
         <div class="mf-namewrap">${nameCell}</div>
         <div class="mf-amtin"><span>$</span><input type="number" inputmode="decimal" step="0.01"${dataN} value="${amtVal}" placeholder="0" onchange="${amtOn}"></div>
@@ -1250,7 +1254,7 @@ function mfExpenseTable(book, period){
      </div>`; };
   const existing=items.filter(it=>it.frequency===cur);
   const used=new Set(); existing.forEach(it=>{ used.add((it.name||'').trim().toLowerCase()); if(it.preset)used.add(it.preset.trim().toLowerCase()); });
-  const presets=((MF_PRESETS[book]||{})[cur]||[]).filter(nm=>!used.has(nm.toLowerCase()));
+  const presets=((MF_PRESETS[book]||{})[cur]||[]).filter(nm=>!used.has(nm.toLowerCase())&&!mfPresetHidden(book,cur,nm));
   let rowsHtml=existing.map(it=>rowFor(it,null,cur)).join('')+presets.map(nm=>rowFor(null,nm,cur)).join('');
   if(!rowsHtml) rowsHtml=`<div class="sub" style="padding:8px 2px">No ${mfFreqLabel(cur).toLowerCase()} expenses yet. Add one below.</div>`;
   return `<div class="mf-sec"><span>Expenses</span><span class="amt">${money2(mfExpPeriodTotal(book,period))} / ${per}</span></div>
@@ -1531,6 +1535,7 @@ async function billConfirm(key){ try{ const r=await fetch('/api/bills/detection/
 async function billDismiss(key){ try{ await fetch('/api/bills/detection/dismiss',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})}); await load(); render(); }catch(e){} }
 // Owner-approved email merchants. Quick-add templates (senders are editable after adding).
 const BILL_TEMPLATES=[
+  ['Con Edison','coned.com, conedison.com, billing.coned.com','Utilities','variable'],
   ['National Grid','nationalgrid.com','Utilities','variable'],
   ['Optimum','optimum.com, optimum.net, alticeusa.com','Utilities','fixed'],
   ['Verizon','verizon.com','Utilities','variable'],
