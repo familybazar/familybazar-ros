@@ -37,7 +37,7 @@ function uid(p){ return p+'_'+Date.now().toString(36)+Math.random().toString(36)
 function now(){ return new Date().toISOString(); }
 
 /* ---------- initial data ---------- */
-function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, salesTx:[], salesDaily:{}, salesMeta:{}, manualFinance:{ sales:[], expenses:[], settings:{ defaultGpPct:28 } }, nrsEmails:{}, nrsDaily:{}, nrsItems:[], nrsInventory:{}, nrsAggregate:null, nrsMeta:{}, billProviders:[], billDetections:{}, billMeta:{}, fulfillment:[], fulfillmentLocal:{}, version:1 }; }
+function emptyData(){ return { products:[], events:[], requests:[], searchLog:[], customers:[], invoices:[], supplierSkus:{}, movements:[], salesRollup:{}, salesTx:[], salesDaily:{}, salesMeta:{}, manualFinance:{ sales:[], expenses:[], settings:{ defaultGpPct:28 } }, nrsEmails:{}, nrsDaily:{}, nrsItems:[], nrsInventory:{}, nrsAggregate:null, nrsMeta:{}, billProviders:[], billDetections:{}, billMeta:{}, fulfillment:[], fulfillmentLocal:{}, pushSubs:[], pushVapid:null, version:1 }; }
 if (!fs.existsSync(DATA))    writeJSON(DATA, emptyData());
 if (!fs.existsSync(SECRETS)) writeJSON(SECRETS, {
   upcApiKey:'', aiProvider:'anthropic', aiApiKey:'', aiModel:'claude-haiku-4-5',
@@ -58,6 +58,16 @@ if(!Array.isArray(data.nrsItems)) data.nrsItems=[];
 if(!Array.isArray(data.salesTx))  data.salesTx=[];
 if(!Array.isArray(data.billProviders)) data.billProviders=[];
 if(data.nrsAggregate===undefined) data.nrsAggregate=null;
+if(!Array.isArray(data.pushSubs)) data.pushSubs=[];
+// Web Push VAPID keypair. Prefer env (stable across data resets); else generate once and persist.
+if(process.env.ROS_VAPID_PUBLIC && process.env.ROS_VAPID_PRIVATE){
+  data.pushVapid={ pub:process.env.ROS_VAPID_PUBLIC, priv:process.env.ROS_VAPID_PRIVATE };
+}
+if(!data.pushVapid || !data.pushVapid.pub || !data.pushVapid.priv){
+  try{ const _ec=crypto.createECDH('prime256v1'); _ec.generateKeys();
+    data.pushVapid={ pub:b64url(_ec.getPublicKey()), priv:b64url(_ec.getPrivateKey()) }; saveData();
+  }catch(e){ console.warn('  VAPID keygen failed:', e&&e.message); }
+}
 // Seed a default utility-bill provider (Con Edison) once, so email detection has a target out of the box.
 if(!data.billProviders.some(p=>p.id==='coned')){
   data.billProviders.push({ id:'coned', name:'Con Edison', book:'general', category:'Utilities',
@@ -132,7 +142,8 @@ function parseJSONLoose(text){ return parseJSONLooseEx(text).data; }
 
 /* ---------- static files ---------- */
 const MIME = {'.html':'text/html','.js':'text/javascript','.css':'text/css',
-              '.json':'application/json','.png':'image/png','.svg':'image/svg+xml','.ico':'image/x-icon'};
+              '.json':'application/json','.png':'image/png','.svg':'image/svg+xml','.ico':'image/x-icon',
+              '.webmanifest':'application/manifest+json'};
 function serveStatic(req, res){
   let p = decodeURIComponent(req.url.split('?')[0]);
   if (p === '/' ) p = '/preview.html';        // PB is now the primary ROS UI
@@ -2212,6 +2223,55 @@ async function sendEmail(to, subject, text){
   if(!(r.status>=200&&r.status<300)){ const t=await r.text().catch(()=>''); throw new Error('SendGrid HTTP '+r.status+' '+t.slice(0,140)); }
   return true;
 }
+/* ============================================================
+   Web Push - zero dependency (VAPID ES256 JWT + RFC 8291 aes128gcm).
+   Uses only Node's built-in crypto. Lets staff get device alerts.
+   ============================================================ */
+function b64url(buf){ return Buffer.from(buf).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function b64urlToBuf(s){ s=String(s||'').replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return Buffer.from(s,'base64'); }
+function vapidHeaders(endpoint){
+  const u=new URL(endpoint);
+  const header=b64url(Buffer.from(JSON.stringify({typ:'JWT',alg:'ES256'})));
+  const sub='mailto:'+((secrets.fromEmail||'familybazar1145@gmail.com').trim());
+  const claims=b64url(Buffer.from(JSON.stringify({ aud:u.origin, exp:Math.floor(Date.now()/1000)+12*3600, sub })));
+  const signingInput=header+'.'+claims;
+  const pub=b64urlToBuf(data.pushVapid.pub), priv=b64urlToBuf(data.pushVapid.priv);
+  const jwk={ kty:'EC', crv:'P-256', d:b64url(priv), x:b64url(pub.slice(1,33)), y:b64url(pub.slice(33,65)) };
+  const keyObj=crypto.createPrivateKey({ key:jwk, format:'jwk' });
+  const sig=crypto.sign('SHA256', Buffer.from(signingInput), { key:keyObj, dsaEncoding:'ieee-p1363' });
+  return { 'Authorization':'vapid t='+signingInput+'.'+b64url(sig)+', k='+data.pushVapid.pub };
+}
+function encryptPush(sub, payloadStr){
+  const uaPublic=b64urlToBuf(sub.keys.p256dh);     // 65 bytes
+  const authSecret=b64urlToBuf(sub.keys.auth);     // 16 bytes
+  const server=crypto.createECDH('prime256v1'); server.generateKeys();
+  const asPublic=server.getPublicKey();            // 65 bytes
+  const shared=server.computeSecret(uaPublic);
+  const salt=crypto.randomBytes(16);
+  const keyInfo=Buffer.concat([Buffer.from('WebPush: info\0'), uaPublic, asPublic]);
+  const ikm=Buffer.from(crypto.hkdfSync('sha256', shared, authSecret, keyInfo, 32));
+  const cek=Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16));
+  const nonce=Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12));
+  const record=Buffer.concat([Buffer.from(payloadStr,'utf8'), Buffer.from([0x02])]);
+  const cipher=crypto.createCipheriv('aes-128-gcm', cek, nonce);
+  const ct=Buffer.concat([cipher.update(record), cipher.final()]);
+  const tag=cipher.getAuthTag();
+  const rs=Buffer.alloc(4); rs.writeUInt32BE(4096,0);
+  return Buffer.concat([salt, rs, Buffer.from([asPublic.length]), asPublic, ct, tag]);
+}
+async function sendPush(sub, payloadObj){
+  const body=encryptPush(sub, JSON.stringify(payloadObj));
+  const headers=Object.assign({ 'Content-Encoding':'aes128gcm', 'Content-Type':'application/octet-stream', 'TTL':'86400' }, vapidHeaders(sub.endpoint));
+  const r=await fetch(sub.endpoint,{ method:'POST', headers, body });
+  return r.status;
+}
+async function broadcastPush(payloadObj){
+  if(!data.pushVapid||!data.pushVapid.priv) return { sent:0, removed:0, total:0, error:'no VAPID key' };
+  const subs=(data.pushSubs||[]).slice(); let ok=0; const gone=[];
+  for(const s of subs){ try{ const st=await sendPush(s, payloadObj); if(st>=200&&st<300)ok++; else if(st===404||st===410)gone.push(s.endpoint); }catch(e){} }
+  if(gone.length){ data.pushSubs=(data.pushSubs||[]).filter(s=>!gone.includes(s.endpoint)); saveData(); }
+  return { sent:ok, removed:gone.length, total:subs.length };
+}
 async function cloverCustomersImport(){
   const mId=(secrets.cloverMerchantId||'').trim(), token=(secrets.cloverApiToken||'').trim(), base=(secrets.cloverBase||'https://api.clover.com').trim();
   if(!mId||!token) throw new Error('Clover not configured (merchant ID + token in Settings).');
@@ -2950,6 +3010,26 @@ const server = http.createServer(async (req, res)=>{
     }
     // -------------------------------------------------------------------------
 
+    // ---- Web Push (installable-app notifications) ----
+    if (url === '/api/push/vapid' && req.method === 'GET')
+      return send(res,200,{ key:(data.pushVapid&&data.pushVapid.pub)||'' });
+    if (url === '/api/push/subscribe' && req.method === 'POST'){
+      const b = await readBody(req);
+      if(!b || !b.endpoint || !b.keys || !b.keys.p256dh || !b.keys.auth) return send(res,400,{ error:'invalid subscription' });
+      data.pushSubs = (data.pushSubs||[]).filter(s=>s.endpoint!==b.endpoint);
+      data.pushSubs.push({ endpoint:b.endpoint, keys:{ p256dh:b.keys.p256dh, auth:b.keys.auth }, createdAt:Date.now() });
+      saveData(); return send(res,200,{ ok:true, subscribers:data.pushSubs.length });
+    }
+    if (url === '/api/push/unsubscribe' && req.method === 'POST'){
+      const b = await readBody(req);
+      data.pushSubs = (data.pushSubs||[]).filter(s=>s.endpoint!==(b&&b.endpoint));
+      saveData(); return send(res,200,{ ok:true });
+    }
+    if (url === '/api/push/test' && req.method === 'POST'){
+      const r = await broadcastPush({ title:'Family Bazar OS', body:'Notifications are working.', url:'/' });
+      return send(res,200,{ ok:true, ...r });
+    }
+
     if (url === '/api/health'){
       let disk={};
       try{ const st=fs.statSync(DATA); const raw=JSON.parse(fs.readFileSync(DATA,'utf8'));
@@ -2981,6 +3061,12 @@ const server = http.createServer(async (req, res)=>{
                posSales: data.posSales||[], cloverProcessed: data.cloverProcessed||{},
                salesTx: data.salesTx||[], salesDaily: data.salesDaily||{}, salesMeta: data.salesMeta||{},
                nrsProcessed: data.nrsProcessed||{}, nrsLog: data.nrsLog||[],
+               // Server-managed stores the client does not own - preserve so a client save can't wipe them.
+               nrsEmails: data.nrsEmails||{}, nrsDaily: data.nrsDaily||{}, nrsItems: data.nrsItems||[],
+               nrsInventory: data.nrsInventory||{}, nrsMeta: data.nrsMeta||{},
+               nrsAggregate: (data.nrsAggregate!==undefined?data.nrsAggregate:null),
+               billProviders: data.billProviders||[], billDetections: data.billDetections||{}, billMeta: data.billMeta||{},
+               pushSubs: data.pushSubs||[], pushVapid: data.pushVapid||null,
                expenses: body.expenses!==undefined?body.expenses:(data.expenses||[]),
                purchaseList: body.purchaseList!==undefined?body.purchaseList:(data.purchaseList||[]),
                campaigns: body.campaigns!==undefined?body.campaigns:(data.campaigns||[]),

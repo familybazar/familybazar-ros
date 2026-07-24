@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Family Bazar - Retail OS (New Design Preview)</title>
+<meta name="theme-color" content="#0A2540">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+<link rel="apple-touch-icon" href="/icons/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Family Bazar OS">
 <style>
   :root{
     --bg:#f5f6f8; --card:#ffffff; --line:#ececf0; --ink:#161a26; --muted:#6b7280;
@@ -2471,6 +2479,54 @@ function render(){
   }, 45000);
   // Keep the "synced Xs ago" label ticking between refreshes (no full re-render).
   setInterval(()=>{const el=document.getElementById('syncind');if(el)el.textContent=syncText();}, 10000);
+})();
+</script>
+<script>
+/* ============ PWA: install + offline + push (self-contained, survives app re-renders) ============ */
+(function(){
+  if(!('serviceWorker' in navigator)) return;
+  var deferredPrompt=null;
+
+  navigator.serviceWorker.register('/sw.js').catch(function(e){ console.warn('SW register failed',e); });
+
+  // Floating action bar (lives outside #app so render() never wipes it).
+  var bar=document.createElement('div');
+  bar.id='pwabar';
+  bar.style.cssText='position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;flex-direction:column;gap:10px;align-items:flex-end';
+  document.body.appendChild(bar);
+  function mkBtn(label,bg){ var b=document.createElement('button'); b.textContent=label;
+    b.style.cssText='border:0;border-radius:12px;padding:11px 16px;font:700 13.5px system-ui,-apple-system,Segoe UI,sans-serif;color:#fff;background:'+bg+';box-shadow:0 6px 20px rgba(10,37,64,.28);cursor:pointer;display:none';
+    bar.appendChild(b); return b; }
+  var installBtn=mkBtn('Install app','#123B8F');
+  var alertBtn  =mkBtn('Turn on alerts','#0A2540');
+
+  // ---- Install ----
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferredPrompt=e; if(!standalone) installBtn.style.display='block'; });
+  installBtn.addEventListener('click', async function(){
+    if(!deferredPrompt) return; installBtn.style.display='none';
+    deferredPrompt.prompt(); try{ await deferredPrompt.userChoice; }catch(e){} deferredPrompt=null;
+  });
+  window.addEventListener('appinstalled', function(){ installBtn.style.display='none'; });
+
+  // ---- Push ----
+  function b64ToU8(base64){ var pad='='.repeat((4-base64.length%4)%4); var s=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');
+    var raw=atob(s); var out=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i); return out; }
+  var pushOk = ('PushManager' in window) && ('Notification' in window);
+  if(pushOk && Notification.permission==='default') alertBtn.style.display='block';
+  alertBtn.addEventListener('click', async function(){
+    alertBtn.style.display='none';
+    try{
+      var perm=await Notification.requestPermission();
+      if(perm!=='granted'){ return; }
+      var reg=await navigator.serviceWorker.ready;
+      var vr=await fetch('/api/push/vapid'); var vd=await vr.json();
+      if(!vd || !vd.key){ alert('Push is not configured on the server yet.'); return; }
+      var existing=await reg.pushManager.getSubscription();
+      var sub=existing || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToU8(vd.key) });
+      await fetch('/api/push/subscribe',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(sub) });
+    }catch(e){ console.warn('push enable failed',e); }
+  });
 })();
 </script>
 </body>

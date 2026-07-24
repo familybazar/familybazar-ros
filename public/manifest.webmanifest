@@ -1,0 +1,17 @@
+{
+  "name": "Family Bazar Retail OS",
+  "short_name": "Family Bazar OS",
+  "description": "Family Bazar staff and owner Retail Operating System - products, stock, sales, finance.",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0A2540",
+  "theme_color": "#0A2540",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
