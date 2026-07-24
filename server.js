@@ -3149,6 +3149,11 @@ const server = http.createServer(async (req, res)=>{
         frequency:'monthly', amount:d.amount, amountType:'variable', startDate:(d.dueDate||new Date().toISOString().slice(0,10)),
         reminderDays:3, active:true, paused:false, provider:d.provider, accountNo:d.accountNo||'' };
         mf.recurring.push(it); }
+      // Record the DATED occurrence so date-wise finance uses this month's actual amount, and align the
+      // bill's cycle to the real due day so occurrence dates line up.
+      if(d.dueDate){ it.startDate=d.dueDate; mf.payments=mf.payments||{}; const okey=it.id+'|'+d.dueDate; const prev=mf.payments[okey]||{};
+        mf.payments[okey]=Object.assign({},prev,{ amount:d.amount, expected:d.amount, dueDate:d.dueDate, source:'email',
+          provider:d.provider, invoiceNo:d.invoiceNo||'', detectedAmount:d.amount, status:(prev.status==='paid'?'paid':(prev.status||'detected')) }); }
       d.status='confirmed'; d.appliedTo=it.id; d.appliedAt=now();
       // Collapse the other emails for the same bill (reminder/autopay/duplicate) so they stop showing.
       const amtR=Math.round(Number(d.amount));

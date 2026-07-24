@@ -640,18 +640,35 @@ async function cloverRebuild(){if(!confirm('Rebuild 90 days of Clover revenue? T
 /* ======================= PHASE 3 MODULES ======================= */
 let salesPeriod=30, salesRange=30, overviewRange='today', aiOut='', aiTitle='', aiQ='', financeTab='overview', financeMode='auto', mfBook='general';
 const EXP_CATS=['Rent','Utilities','Payroll','Insurance','Software & POS','Marketing','Maintenance','Repairs','Supplies','Bank & card fees','Shipping','Taxes & licenses','Other'];
-function expensesForPeriod(days){if(typeof days==='string')days=presetDays(days);const cut=Date.now()-days*864e5;let total=0,fixed=0,variable=0;const byCat={};
-  // Primary source: the shared manual-finance recurring bills (Rent, Electric, Wi-Fi, Payroll…), amortized
-  // to the selected window. This is the single expense backbone that Cash Entry, Manual and Automated share.
-  const cyc=f=>f==='daily'?1:f==='weekly'?7:f==='biweekly'?14:f==='monthly'?30:f==='yearly'?365:0;
-  (((S.manualFinance||{}).recurring)||[]).forEach(it=>{ if(it.active===false||it.paused)return; const amt=Number(it.amount)||0; if(!amt)return;
-    let periodAmt=0;
-    if(it.frequency==='once'){ const t=it.startDate?new Date(it.startDate+'T12:00:00').getTime():0; if(t>=cut)periodAmt=amt; }
-    else { const cd=cyc(it.frequency); if(cd>0)periodAmt=(amt/cd)*days; }
-    if(!periodAmt)return; total+=periodAmt; if(it.amountType==='variable')variable+=periodAmt; else fixed+=periodAmt;
-    const c=it.category||'Other'; byCat[c]=(byCat[c]||0)+periodAmt; });
+// Bill occurrence dates (by its real cycle) that fall inside [from,to], regardless of when it was set up.
+function billOccsInWindow(it, fromStr, toStr){
+  const out=[]; const f=it.frequency; const anchor=it.startDate||toStr;
+  const from=new Date(fromStr+'T00:00:00'), to=new Date(toStr+'T23:59:59'); const end=it.endDate?new Date(it.endDate+'T23:59:59'):null;
+  const A=new Date(anchor+'T12:00:00'); const push=d=>{ if(d>=from&&d<=to&&(!end||d<=end)) out.push(d.toISOString().slice(0,10)); };
+  if(f==='once'){ push(new Date(anchor+'T12:00:00')); return out; }
+  if(f==='monthly'){ const dom=A.getDate(); let y=from.getFullYear(),m=from.getMonth();
+    for(let i=0;i<16;i++){ const dim=new Date(y,m+1,0).getDate(); push(new Date(y,m,Math.min(dom,dim),12)); m++; if(m>11){m=0;y++;} if(new Date(y,m,1,12)>to)break; } return out; }
+  if(f==='yearly'){ for(let y=from.getFullYear();y<=to.getFullYear()+1;y++) push(new Date(y,A.getMonth(),A.getDate(),12)); return out; }
+  if(f==='weekly'||f==='biweekly'){ const step=(f==='weekly'?7:14)*864e5; let t=A.getTime(); while(t>from.getTime())t-=step; while(t<from.getTime())t+=step; let g=0; while(t<=to.getTime()&&g<400){ push(new Date(t)); t+=step; g++; } return out; }
+  return out;
+}
+// Date-wise expenses: each recurring bill counts in the period its due date falls in, using the ACTUAL
+// per-occurrence amount (from an email confirm) when present, else the bill's current amount.
+function expensesForPeriod(days){
+  let fromStr,toStr;
+  if(typeof days==='string' && typeof SALES_PRESETS!=='undefined' && SALES_PRESETS.some(p=>p[0]===days)){ const r=rangeYmd(days); fromStr=r.from; toStr=r.to; }
+  else { if(typeof days==='string')days=presetDays(days); const now=new Date(); toStr=ymdLocal(now); fromStr=ymdLocal(new Date(now.getFullYear(),now.getMonth(),now.getDate()-(days-1),12)); }
+  const days2=Math.max(1,Math.round((new Date(toStr+'T12:00:00')-new Date(fromStr+'T12:00:00'))/864e5)+1);
+  let total=0,fixed=0,variable=0;const byCat={};
+  const add=(it,amt)=>{ if(!(amt>0))return; total+=amt; if(it.amountType==='variable')variable+=amt; else fixed+=amt; const c=it.category||'Other'; byCat[c]=(byCat[c]||0)+amt; };
+  const pay=(S.manualFinance||{}).payments||{};
+  (((S.manualFinance||{}).recurring)||[]).forEach(it=>{ if(it.active===false||it.paused)return;
+    if(it.frequency==='daily'){ const a=Number(it.amount)||0; if(a>0)add(it,a*days2); return; }
+    billOccsInWindow(it, fromStr, toStr).forEach(due=>{ const o=pay[it.id+'|'+due]; if(o&&o.status==='skipped')return; add(it, mfOccAmount(it,due)); });
+  });
   // Legacy ad-hoc expense store (kept so anything still writing to it is not lost).
-  (S.expenses||[]).forEach(x=>{let amt=0;if(x.recurring)amt=(x.amount||0)*(days/30);else{const t=x.date?new Date(x.date).getTime():0;if(t>=cut)amt=(x.amount||0);}if(!amt)return;total+=amt;if(x.type==='fixed')fixed+=amt;else variable+=amt;byCat[x.category||'Other']=(byCat[x.category||'Other']||0)+amt;});
+  const cut=Date.now()-days2*864e5;
+  (S.expenses||[]).forEach(x=>{let amt=0;if(x.recurring)amt=(x.amount||0)*(days2/30);else{const t=x.date?new Date(x.date).getTime():0;if(t>=cut)amt=(x.amount||0);}if(!amt)return;total+=amt;if(x.type==='fixed')fixed+=amt;else variable+=amt;byCat[x.category||'Other']=(byCat[x.category||'Other']||0)+amt;});
   return {total,fixed,variable,byCat};}
 const CH_COLOR={Clover:'#7cae90',NRS:'#7d93df',Website:'#d0a94e',Other:'#b6bcc6'};
 function fmtMoney(n){return money(n)}
@@ -1543,18 +1560,16 @@ function financeOverview(){
 }
 function financeExpenses(){
   const mf=mfEnsure(); const list=(mf.recurring||[]).filter(it=>it.active!==false&&!it.paused);
-  const cyc=f=>f==='daily'?1:f==='weekly'?7:f==='biweekly'?14:f==='monthly'?30:f==='yearly'?365:0;
-  const monthlyOf=it=>{ const a=Number(it.amount)||0; if(!a)return 0; if(it.frequency==='once')return 0; const cd=cyc(it.frequency); return cd>0?(a/cd)*30:0; };
-  let fixed=0,variable=0; list.forEach(it=>{ const m=monthlyOf(it); if(!m)return; if(it.amountType==='variable')variable+=m; else fixed+=m; });
-  const total=fixed+variable; const count=list.filter(it=>Number(it.amount)>0).length;
+  const ex=expensesForPeriod(salesRangeKey); const rl=rangeLabel(salesRangeKey);
+  const count=list.filter(it=>Number(it.amount)>0).length;
   return `${mfCashCSS()}<div class="mf-wrap">
     <div class="mf-kpis" style="margin-bottom:14px">
-      <div class="mf-kpi"><div class="k">Monthly fixed</div><div class="v">${money2(fixed)}</div></div>
-      <div class="mf-kpi"><div class="k">Monthly variable</div><div class="v">${money2(variable)}</div></div>
-      <div class="mf-kpi net"><div class="k">Monthly total</div><div class="v">${money2(total)}</div></div>
+      <div class="mf-kpi"><div class="k">Fixed · ${rl}</div><div class="v">${money2(ex.fixed)}</div></div>
+      <div class="mf-kpi"><div class="k">Variable · ${rl}</div><div class="v">${money2(ex.variable)}</div></div>
+      <div class="mf-kpi net"><div class="k">Total · ${rl}</div><div class="v">${money2(ex.total)}</div></div>
       <div class="mf-kpi"><div class="k">Active bills</div><div class="v">${count}</div></div>
     </div>
-    <div class="sub" style="margin:0 0 16px">Same bills as Cash Entry - one backbone. Fill the amount and ROS handles scheduling, reminders and totals. Variable bills (electric, gas) auto-fill from email when detected.</div>
+    <div class="sub" style="margin:0 0 16px">Date-wise: each bill counts in the period its due date falls in, using the actual amount (from email when detected). Same bills as Cash Entry.</div>
     <div class="mf-books">
       <div class="mf-book"><div class="mf-bookhd"><span class="mf-bookicon general">${mfIcon('store',18,'#12855a')}</span><span class="mf-booktitle">General Cash</span><span class="mf-booktag">Store</span></div>${mfExpenseTable('general','monthly')}</div>
       <div class="mf-book"><div class="mf-bookhd"><span class="mf-bookicon phone">${mfIcon('phone',18,'#4f6ef7')}</span><span class="mf-booktitle">Phone Cash</span><span class="mf-booktag">Phones & electronics</span></div>${mfExpenseTable('phone','monthly')}</div>
