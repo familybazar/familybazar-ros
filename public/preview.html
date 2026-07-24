@@ -1187,10 +1187,10 @@ function viewCashEntry(){
      <div style="max-width:150px;margin-top:2px"><div class="mf-lbl">Profit %</div>${inpPct('phone',p.gpPct)}</div></div>`;
   const expBlock=(book)=>{ const items=(mf.recurring||[]).filter(it=>it.book===book&&!it.paused);
      const cur=mfExpTab[book]||'monthly';
-     const tabs=[['weekly','Weekly'],['biweekly','Bi-weekly'],['monthly','Monthly'],['yearly','Yearly'],['once','One-time']];
+     const tabs=[['daily','Daily'],['weekly','Weekly'],['biweekly','Bi-weekly'],['monthly','Monthly'],['yearly','Yearly'],['once','One-time']];
      // red dot: something to fill in (a listed bill without an amount) OR a bill due & unpaid
      const dotFor=f=>{ const ex=items.filter(it=>it.frequency===f);
-        const due=ex.some(it=>{ if(!(Number(it.amount)>0))return false; const nd=mfNextDue(it); if(!nd)return false; const o=mfOcc(it.id,nd); if(o&&(o.status==='paid'||o.status==='skipped'))return false; return nd<=mfTodayStr(); });
+        const due=f==='daily'?false:ex.some(it=>{ if(!(Number(it.amount)>0))return false; const nd=mfNextDue(it); if(!nd)return false; const o=mfOcc(it.id,nd); if(o&&(o.status==='paid'||o.status==='skipped'))return false; return nd<=mfTodayStr(); });
         if(due)return true;
         const filled=new Set(); ex.forEach(it=>{ if(Number(it.amount)>0){ filled.add((it.name||'').trim().toLowerCase()); if(it.preset)filled.add(it.preset.trim().toLowerCase()); } });
         const presetsMissing=((MF_PRESETS[book]||{})[f]||[]).some(nm=>!filled.has(nm.toLowerCase()));
@@ -1207,7 +1207,9 @@ function viewCashEntry(){
         const amtOn=it?`mfExpSetAmt('${it.id}',this.value)`:`mfPresetAmt('${book}',this.dataset.n,'${freq}',this.value)`;
         const dueOn=it?`mfExpSetDue('${it.id}',this.value)`:`mfPresetDue('${book}',this.dataset.n,'${freq}',this.value)`;
         const dataN=it?'':` data-n="${esc(presetName)}"`;
-        const paidCell=(it&&nd)?(paid?`<button class="mf-paid" onclick="mfUnpay('${it.id}','${nd}')">${mfIcon('check',12,'#227a4e')}Paid${paidTxt}</button>`:`<button class="mf-due" onclick="mfMarkPaid('${it.id}','${nd}')">Mark paid</button>`):`<span class="mf-hint">Enter amount</span>`;
+        const paidCell=freq==='daily'
+          ?`<span class="mf-hint">${it&&Number(it.amount)>0?'per day':'Enter amount'}</span>`
+          :((it&&nd)?(paid?`<button class="mf-paid" onclick="mfUnpay('${it.id}','${nd}')">${mfIcon('check',12,'#227a4e')}Paid${paidTxt}</button>`:`<button class="mf-due" onclick="mfMarkPaid('${it.id}','${nd}')">Mark paid</button>`):`<span class="mf-hint">Enter amount</span>`);
         const del=it?`<button class="mf-x" onclick="mfExpRemove('${it.id}')">${mfIcon('trash',15,'#9aa1ad')}</button>`:`<span></span>`;
         return `<div class="mf-exprow2">
            <div class="mf-namewrap">${nameCell}</div>
