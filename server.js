@@ -1771,17 +1771,40 @@ setInterval(()=>{ if(secrets.nrsEmailFetch) nrsGmailRun({ sinceDays:45, preview:
 async function billExtract(bodyText, providerName){
   const text=(bodyText||'').replace(/\s+/g,' ').slice(0,6000);
   if(!text) return { error:'empty body' };
-  const prompt='Extract billing details from this utility/service bill email for a small store. Provider: '
-    +(providerName||'unknown')+'. Return ONLY compact JSON with keys: amount (number = total amount due in USD, '
-    +'no symbols; null if not explicitly stated), dueDate (YYYY-MM-DD or null), invoiceNo (string or null), '
-    +'accountNo (string or null), amountFound (true only if a dollar amount due is explicitly present). '
-    +'Never guess an amount that is not in the text. Email:\n"""'+text+'"""';
+  const prompt='Classify and extract from this utility/service email for a small store. Provider: '+(providerName||'unknown')
+    +'. Return ONLY compact JSON with keys: '
+    +'kind ("bill" if it presents an amount DUE / a new statement / bill-is-ready; "payment" if it confirms a payment RECEIVED, a receipt, or autopay processed; "other" otherwise), '
+    +'amount (number in USD - the amount due for a bill, or the amount paid for a payment; null if none), '
+    +'dueDate (YYYY-MM-DD for bills, else null), paidDate (YYYY-MM-DD for payments, else null), '
+    +'invoiceNo (string or null), accountNo (string or null), amountFound (true only if a dollar amount is explicitly present). '
+    +'Never guess an amount or date that is not in the text. Email:\n"""'+text+'"""';
   let raw; try{ raw=await aiText(prompt, 300); }catch(e){ return { error:'ai: '+(e&&e.message||e) }; }
   const m=(raw||'').match(/\{[\s\S]*\}/); if(!m) return { error:'no json' };
   let obj; try{ obj=JSON.parse(m[0]); }catch(e){ return { error:'bad json' }; }
   const amt=(obj.amount!=null&&obj.amountFound)?Number(String(obj.amount).replace(/[^0-9.\-]/g,'')):null;
-  return { amount:isFinite(amt)?amt:null, dueDate:obj.dueDate||null, invoiceNo:obj.invoiceNo||null, accountNo:obj.accountNo||null, amountFound:!!obj.amountFound };
+  return { kind:(obj.kind||'bill'), amount:isFinite(amt)?amt:null, dueDate:obj.dueDate||null, paidDate:obj.paidDate||null,
+    invoiceNo:obj.invoiceNo||null, accountNo:obj.accountNo||null, amountFound:!!obj.amountFound };
 }
+// Canonical monthly occurrence date for a bill (its due-day within the month of dateStr), so bill-ready and
+// payment emails for the same month land on the SAME occurrence and align with date-wise expense generation.
+function billCanonicalDue(it, dateStr){ const d=new Date(dateStr+'T12:00:00'); if(isNaN(d.getTime()))return dateStr;
+  if((it.frequency||'monthly')==='monthly'){ const a=it.startDate?new Date(it.startDate+'T12:00:00'):d; const dom=isNaN(a.getTime())?d.getDate():a.getDate();
+    const dim=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); return new Date(d.getFullYear(),d.getMonth(),Math.min(dom,dim),12).toISOString().slice(0,10); }
+  return dateStr; }
+// Upsert an occurrence for a bill. Matches an existing occurrence by amount first (bridges a bill-ready and its
+// later payment even across months), else creates one on the canonical monthly date. Merges amount + paid status.
+function billUpsertOccurrence(it, amount, monthDateStr, opts){ opts=opts||{};
+  const mf=data.manualFinance=data.manualFinance||{}; mf.payments=mf.payments||{};
+  const amtR=Math.round(Number(amount)); let key=null;
+  for(const k in mf.payments){ if(k.indexOf(it.id+'|')!==0)continue; const p=mf.payments[k];
+    if(p&&p.amount!=null&&Math.round(Number(p.amount))===amtR){ key=k; if(!(p.status==='paid'&&!opts.paid))break; } }
+  if(!key) key=it.id+'|'+billCanonicalDue(it, monthDateStr);
+  const prev=mf.payments[key]||{};
+  const rec=Object.assign({},prev,{ amount:Number(amount), expected:(prev.expected!=null?prev.expected:Number(amount)),
+    dueDate:prev.dueDate||billCanonicalDue(it,monthDateStr), source:opts.source||prev.source||'email' });
+  if(opts.paid){ rec.status='paid'; rec.paidDate=opts.paidDate||monthDateStr; }
+  else if(rec.status!=='paid'){ rec.status=prev.status||'detected'; }
+  mf.payments[key]=rec; return key; }
 function billGmailRun(opts){
   opts=opts||{};
   data.billDetections=data.billDetections||{}; data.billMeta=data.billMeta||{}; data.billProviders=data.billProviders||[];
@@ -1834,7 +1857,27 @@ function billGmailRun(opts){
             let ext; try{ ext=await billExtract(bodyText, prov.name); }catch(e){ ext={error:String(e&&e.message||e)}; }
             const recvDay=new Date(receivedMs).toISOString().slice(0,10);
             const hasAmt=!!(ext&&ext.amount!=null);
-            data.billDetections[key]={ key, provider:prov.name, providerId:prov.id, book:prov.book||'general',
+            // PAYMENT / receipt email -> auto-mark the matching bill occurrence paid (a receipt is factual).
+            if(ext && ext.kind==='payment' && hasAmt){
+              const mf=data.manualFinance=data.manualFinance||{}; mf.recurring=mf.recurring||[];
+              const nm=String(prov.matchName||prov.name).trim().toLowerCase();
+              const it=mf.recurring.find(x=>x.book===(prov.book||'general') && (x.name||'').trim().toLowerCase()===nm);
+              let applied=null;
+              // A payment marks an EXISTING bill of the same amount paid; it never creates a dated expense
+              // (the payment month is not the bill's billing month). If the bill isn't recorded yet, the
+              // amount is kept on the detection and the bill-ready confirm will retro-match it.
+              if(it){ const amtR=Math.round(Number(ext.amount)); const pays=(mf.payments||{});
+                for(const k in pays){ if(k.indexOf(it.id+'|')!==0)continue; const p=pays[k]; if(p&&p.amount!=null&&Math.round(Number(p.amount))===amtR){ p.status='paid'; p.paidDate=ext.paidDate||recvDay; p.source=p.source||'email-payment'; applied=k; break; } }
+                if(it.amountType!=='variable')it.amountType='variable'; }
+              data.billDetections[key]={ key, kind:'payment', provider:prov.name, providerId:prov.id, book:prov.book||'general',
+                category:prov.category||'Utilities', matchName:prov.matchName||prov.name, messageId, subject,
+                receivedAt:new Date(receivedMs).toISOString(), amount:ext.amount, paidDate:ext.paidDate||recvDay,
+                invoiceNo:(ext&&ext.invoiceNo)||null, status: applied?'applied':(it?'pending':'unmatched'), appliedTo:applied||null, detectedAt:now() };
+              log.payments=(log.payments||0)+1;
+              continue;
+            }
+            // BILL / statement email -> detection the owner confirms.
+            data.billDetections[key]={ key, kind:'bill', provider:prov.name, providerId:prov.id, book:prov.book||'general',
               category:prov.category||'Utilities', matchName:prov.matchName||prov.name, messageId, subject,
               receivedAt:new Date(receivedMs).toISOString(), amount:hasAmt?ext.amount:null,
               // If the email prints no due date (Con Ed "bill ready"), anchor to the email date so the bill
@@ -3154,11 +3197,14 @@ const server = http.createServer(async (req, res)=>{
         frequency:'monthly', amount:d.amount, amountType:'variable', startDate:(d.dueDate||new Date().toISOString().slice(0,10)),
         reminderDays:3, active:true, paused:false, provider:d.provider, accountNo:d.accountNo||'' };
         mf.recurring.push(it); }
-      // Record the DATED occurrence so date-wise finance uses this month's actual amount, and align the
-      // bill's cycle to the real due day so occurrence dates line up.
-      if(d.dueDate){ it.startDate=d.dueDate; mf.payments=mf.payments||{}; const okey=it.id+'|'+d.dueDate; const prev=mf.payments[okey]||{};
-        mf.payments[okey]=Object.assign({},prev,{ amount:d.amount, expected:d.amount, dueDate:d.dueDate, source:'email',
-          provider:d.provider, invoiceNo:d.invoiceNo||'', detectedAmount:d.amount, status:(prev.status==='paid'?'paid':(prev.status||'detected')) }); }
+      // Record the DATED occurrence so date-wise finance uses this month's actual amount. Aligns the bill's
+      // cycle to the real due day and merges with any payment already recorded for this amount.
+      if(d.dueDate && !it.startDate) it.startDate=d.dueDate;
+      const okey=billUpsertOccurrence(it, d.amount, d.dueDate||new Date().toISOString().slice(0,10), {source:'email'});
+      // If a payment receipt for this exact amount already arrived, mark this bill paid now.
+      const amtR2=Math.round(Number(d.amount));
+      const paidDet=Object.values(data.billDetections).find(x=>x&&x.kind==='payment'&&x.providerId===d.providerId&&x.amount!=null&&Math.round(Number(x.amount))===amtR2);
+      if(paidDet && mf.payments[okey]){ mf.payments[okey].status='paid'; mf.payments[okey].paidDate=paidDet.paidDate||mf.payments[okey].dueDate; paidDet.status='applied'; paidDet.appliedTo=okey; }
       d.status='confirmed'; d.appliedTo=it.id; d.appliedAt=now();
       // Collapse the other emails for the same bill (reminder/autopay/duplicate) so they stop showing.
       const amtR=Math.round(Number(d.amount));
