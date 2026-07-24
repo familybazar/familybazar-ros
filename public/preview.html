@@ -1498,7 +1498,7 @@ function financeDetectedBills(){
   dets.sort((a,b)=>String(b.dueDate||b.receivedAt||'').localeCompare(String(a.dueDate||a.receivedAt||'')));
   const row=d=>{ const has=d.amount!=null;
     return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:11px 0;border-top:1px solid var(--line)">
-       <div><b>${esc(d.provider)}</b> <span class="sub">${esc(d.matchName||'')}${d.dueDate?' · due '+esc(d.dueDate):''}${d.invoiceNo?' · #'+esc(d.invoiceNo):''}</span></div>
+       <div><b>${esc(d.provider)}</b> <span class="sub">${esc(d.matchName||'')}${d.dueDate?' · '+(d.dueEstimated?'billing':'due')+' '+esc(d.dueDate):''}${d.invoiceNo?' · #'+esc(d.invoiceNo):''}</span></div>
        <div style="font-weight:700;white-space:nowrap">${has?money2(d.amount):'<span class="sub" style="font-weight:400">no amount in email</span>'}</div>
        <div style="display:flex;gap:6px">${has?`<button class="btn sm" onclick="billConfirm('${d.key}')">Confirm</button>`:`<button class="btn sec sm" onclick="go('cashentry')">Enter</button>`}<button class="btn sec sm" onclick="billDismiss('${d.key}')">Dismiss</button></div>
      </div>`; };

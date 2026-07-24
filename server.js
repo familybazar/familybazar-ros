@@ -1832,10 +1832,15 @@ function billGmailRun(opts){
             const b=nrsExtractBodies(msg); const bodyText=(b.text||'').replace(/<[^>]+>/g,' ') || nrsStripHtml(b.html);
             const dateHdr=nrsHeaderVal(msg,'date'); const receivedMs=dateHdr?(Date.parse(dateHdr)||Date.now()):Date.now();
             let ext; try{ ext=await billExtract(bodyText, prov.name); }catch(e){ ext={error:String(e&&e.message||e)}; }
+            const recvDay=new Date(receivedMs).toISOString().slice(0,10);
+            const hasAmt=!!(ext&&ext.amount!=null);
             data.billDetections[key]={ key, provider:prov.name, providerId:prov.id, book:prov.book||'general',
               category:prov.category||'Utilities', matchName:prov.matchName||prov.name, messageId, subject,
-              receivedAt:new Date(receivedMs).toISOString(), amount:(ext&&ext.amount!=null)?ext.amount:null,
-              dueDate:(ext&&ext.dueDate)||null, invoiceNo:(ext&&ext.invoiceNo)||null, accountNo:(ext&&ext.accountNo)||null,
+              receivedAt:new Date(receivedMs).toISOString(), amount:hasAmt?ext.amount:null,
+              // If the email prints no due date (Con Ed "bill ready"), anchor to the email date so the bill
+              // still lands in the right month for date-wise accounting; flag it as an estimate.
+              dueDate:(ext&&ext.dueDate)||(hasAmt?recvDay:null), dueEstimated:!(ext&&ext.dueDate)&&hasAmt,
+              invoiceNo:(ext&&ext.invoiceNo)||null, accountNo:(ext&&ext.accountNo)||null,
               amountFound:!!(ext&&ext.amountFound), status:'new', error:(ext&&ext.error)||null, detectedAt:now() };
             if(ext&&ext.amount!=null) log.detected++; else log.noAmount++;
           }
