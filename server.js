@@ -1911,10 +1911,13 @@ function billGmailRun(opts){
               if(it){ const amtR=Math.round(Number(ext.amount)); const pays=(mf.payments||{});
                 for(const k in pays){ if(k.indexOf(it.id+'|')!==0)continue; const p=pays[k]; if(p&&p.amount!=null&&Math.round(Number(p.amount))===amtR){ p.status='paid'; p.paidDate=ext.paidDate||recvDay; p.source=p.source||'email-payment'; applied=k; break; } }
                 if(it.amountType!=='variable')it.amountType='variable'; }
+              // If it matched an existing bill, it's applied silently. If not (e.g. a subscription that only
+              // sends a receipt, like Vercel/Supabase), surface it as a confirmable PAID expense.
               data.billDetections[key]={ key, kind:'payment', provider:prov.name, providerId:prov.id, book:prov.book||'general',
-                category:prov.category||'Utilities', matchName:prov.matchName||prov.name, messageId, subject,
-                receivedAt:new Date(receivedMs).toISOString(), amount:ext.amount, paidDate:ext.paidDate||recvDay,
-                invoiceNo:(ext&&ext.invoiceNo)||null, status: applied?'applied':(it?'pending':'unmatched'), appliedTo:applied||null, detectedAt:now() };
+                category:prov.category||'Utilities', type:prov.type||'variable', serviceLagMonths:(prov.serviceLagMonths!=null?prov.serviceLagMonths:1),
+                matchName:prov.matchName||prov.name, messageId, subject,
+                receivedAt:new Date(receivedMs).toISOString(), amount:ext.amount, paidDate:ext.paidDate||recvDay, dueDate:ext.dueDate||null,
+                invoiceNo:(ext&&ext.invoiceNo)||null, status: applied?'applied':'new', appliedTo:applied||null, detectedAt:now() };
               log.payments=(log.payments||0)+1;
               continue;
             }
@@ -3261,16 +3264,17 @@ const server = http.createServer(async (req, res)=>{
         frequency:'monthly', amount:d.amount, amountType:atype, serviceLagMonths:lag, startDate:(d.dueDate||new Date().toISOString().slice(0,10)),
         reminderDays:3, active:true, paused:false, provider:d.provider, accountNo:d.accountNo||'' };
         mf.recurring.push(it); }
-      // Record the DATED occurrence so date-wise finance uses this month's actual amount. Aligns the bill's
-      // cycle to the real due day and merges with any payment already recorded for this amount.
-      if(d.dueDate && !it.startDate) it.startDate=d.dueDate;
-      // Attribute the bill to its usage month (due month minus the provider lag), not the due month.
-      const svcDate=billServiceDate(d.dueDate||new Date().toISOString().slice(0,10), (it.serviceLagMonths!=null?it.serviceLagMonths:1));
-      const okey=billUpsertOccurrence(it, d.amount, svcDate, {source:'email'});
-      // If a payment receipt for this exact amount already arrived, mark this bill paid now.
-      const amtR2=Math.round(Number(d.amount));
-      const paidDet=Object.values(data.billDetections).find(x=>x&&x.kind==='payment'&&x.providerId===d.providerId&&x.amount!=null&&Math.round(Number(x.amount))===amtR2);
-      if(paidDet && mf.payments[okey]){ mf.payments[okey].status='paid'; mf.payments[okey].paidDate=paidDet.paidDate||mf.payments[okey].dueDate; paidDet.status='applied'; paidDet.appliedTo=okey; }
+      // Record the DATED occurrence, attributed to the usage month (date minus provider lag). A receipt
+      // (kind 'payment') is recorded as already paid; a bill stays unpaid until its receipt arrives.
+      const isPayment = (d.kind==='payment');
+      const dateBase = isPayment ? (d.paidDate||d.dueDate||new Date().toISOString().slice(0,10)) : (d.dueDate||new Date().toISOString().slice(0,10));
+      if(dateBase && !it.startDate) it.startDate=dateBase;
+      const svcDate=billServiceDate(dateBase, lag);
+      const okey=billUpsertOccurrence(it, d.amount, svcDate, {source:'email', paid:isPayment, paidDate:(isPayment?(d.paidDate||dateBase):undefined)});
+      // If a payment receipt for this exact amount already arrived (bill case), mark this bill paid now.
+      if(!isPayment){ const amtR2=Math.round(Number(d.amount));
+        const paidDet=Object.values(data.billDetections).find(x=>x&&x.kind==='payment'&&x.providerId===d.providerId&&x.amount!=null&&Math.round(Number(x.amount))===amtR2);
+        if(paidDet && mf.payments[okey]){ mf.payments[okey].status='paid'; mf.payments[okey].paidDate=paidDet.paidDate||mf.payments[okey].dueDate; paidDet.status='applied'; paidDet.appliedTo=okey; } }
       d.status='confirmed'; d.appliedTo=it.id; d.appliedAt=now();
       // Collapse the other emails for the same bill (reminder/autopay/duplicate) so they stop showing.
       const amtR=Math.round(Number(d.amount));
