@@ -1787,6 +1787,11 @@ async function billExtract(bodyText, providerName){
 }
 // Canonical monthly occurrence date for a bill (its due-day within the month of dateStr), so bill-ready and
 // payment emails for the same month land on the SAME occurrence and align with date-wise expense generation.
+// The usage/service month a bill belongs to = its due month minus the provider's lag (default 1 month),
+// since utilities bill in arrears (a bill due in July is for June's usage).
+function billServiceDate(dueStr, lag){ lag=(lag==null?1:lag); const d=new Date(dueStr+'T12:00:00'); if(isNaN(d.getTime()))return dueStr;
+  const total=d.getFullYear()*12+d.getMonth()-lag; const y=Math.floor(total/12); const mm=((total%12)+12)%12;
+  const dim=new Date(y,mm+1,0).getDate(); return new Date(y,mm,Math.min(d.getDate(),dim),12).toISOString().slice(0,10); }
 function billCanonicalDue(it, dateStr){ const d=new Date(dateStr+'T12:00:00'); if(isNaN(d.getTime()))return dateStr;
   if((it.frequency||'monthly')==='monthly'){ const a=it.startDate?new Date(it.startDate+'T12:00:00'):d; const dom=isNaN(a.getTime())?d.getDate():a.getDate();
     const dim=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); return new Date(d.getFullYear(),d.getMonth(),Math.min(dom,dim),12).toISOString().slice(0,10); }
@@ -3204,7 +3209,9 @@ const server = http.createServer(async (req, res)=>{
       // Record the DATED occurrence so date-wise finance uses this month's actual amount. Aligns the bill's
       // cycle to the real due day and merges with any payment already recorded for this amount.
       if(d.dueDate && !it.startDate) it.startDate=d.dueDate;
-      const okey=billUpsertOccurrence(it, d.amount, d.dueDate||new Date().toISOString().slice(0,10), {source:'email'});
+      // Attribute the bill to its usage month (due month minus the provider lag), not the due month.
+      const svcDate=billServiceDate(d.dueDate||new Date().toISOString().slice(0,10), (it.serviceLagMonths!=null?it.serviceLagMonths:1));
+      const okey=billUpsertOccurrence(it, d.amount, svcDate, {source:'email'});
       // If a payment receipt for this exact amount already arrived, mark this bill paid now.
       const amtR2=Math.round(Number(d.amount));
       const paidDet=Object.values(data.billDetections).find(x=>x&&x.kind==='payment'&&x.providerId===d.providerId&&x.amount!=null&&Math.round(Number(x.amount))===amtR2);

@@ -663,8 +663,14 @@ function expensesForPeriod(days){
   const add=(it,amt)=>{ if(!(amt>0))return; total+=amt; if(it.amountType==='variable')variable+=amt; else fixed+=amt; const c=it.category||'Other'; byCat[c]=(byCat[c]||0)+amt; };
   const pay=(S.manualFinance||{}).payments||{};
   (((S.manualFinance||{}).recurring)||[]).forEach(it=>{ if(it.active===false||it.paused)return;
-    if(it.frequency==='daily'){ const a=Number(it.amount)||0; if(a>0)add(it,a*days2); return; }
-    billOccsInWindow(it, fromStr, toStr).forEach(due=>{ const o=pay[it.id+'|'+due]; if(o&&o.status==='skipped')return; add(it, mfOccAmount(it,due)); });
+    const okeys=Object.keys(pay).filter(k=>k.indexOf(it.id+'|')===0);
+    const emailKeys=okeys.filter(k=>/email/.test((pay[k]&&pay[k].source)||''));
+    if(emailKeys.length){
+      // Utility/variable bill from email: count ONLY its actual recorded bills, on their usage-month date.
+      emailKeys.forEach(k=>{ const rec=pay[k]; if(rec.status==='skipped')return; const dstr=k.slice(k.indexOf('|')+1);
+        if(dstr>=fromStr&&dstr<=toStr) add(it, rec.amount!=null?Number(rec.amount):(Number(it.amount)||0)); });
+    } else if(it.frequency==='daily'){ const a=Number(it.amount)||0; if(a>0)add(it,a*days2); }
+    else { billOccsInWindow(it, fromStr, toStr).forEach(due=>{ const o=pay[it.id+'|'+due]; if(o&&o.status==='skipped')return; add(it, mfOccAmount(it,due)); }); }
   });
   // Legacy ad-hoc expense store (kept so anything still writing to it is not lost).
   const cut=Date.now()-days2*864e5;
