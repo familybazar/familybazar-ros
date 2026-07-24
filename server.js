@@ -1885,7 +1885,8 @@ function billGmailRun(opts){
             }
             // BILL / statement email -> detection the owner confirms.
             data.billDetections[key]={ key, kind:'bill', provider:prov.name, providerId:prov.id, book:prov.book||'general',
-              category:prov.category||'Utilities', matchName:prov.matchName||prov.name, messageId, subject,
+              category:prov.category||'Utilities', type:prov.type||'variable', serviceLagMonths:(prov.serviceLagMonths!=null?prov.serviceLagMonths:1),
+              matchName:prov.matchName||prov.name, messageId, subject,
               receivedAt:new Date(receivedMs).toISOString(), amount:hasAmt?ext.amount:null,
               // If the email prints no due date (Con Ed "bill ready"), estimate it ~21 days out (typical
               // utility terms) so this month's bill lands in the month it's actually due/paid, not the same
@@ -3193,6 +3194,24 @@ const server = http.createServer(async (req, res)=>{
       d.status='dismissed'; d.dismissedAt=now(); saveData();
       return send(res,200,{ ok:true });
     }
+    // Add / update a tracked email provider (merchant the owner approves).
+    if (url === '/api/bills/provider' && req.method === 'POST'){
+      const b = await readBody(req); if(!b || !b.name) return send(res,400,{error:'name required'});
+      data.billProviders = data.billProviders || [];
+      const senders = Array.isArray(b.senders) ? b.senders : String(b.senders||'').split(/[\s,;]+/).map(s=>s.trim().toLowerCase()).filter(Boolean);
+      if(!senders.length) return send(res,400,{error:'at least one sender email or domain is required'});
+      const rec = { name:String(b.name).trim(), book:(b.book==='phone'?'phone':'general'),
+        category:b.category||'Utilities', type:(b.type==='fixed'?'fixed':'variable'),
+        senders, subjectMatch:(b.subjectMatch||'').trim(), matchName:(b.matchName||b.name).trim(),
+        serviceLagMonths:(b.serviceLagMonths!=null?Number(b.serviceLagMonths):1), active:(b.active!==false) };
+      if(b.id){ const p=data.billProviders.find(x=>x.id===b.id); if(p) Object.assign(p, rec); else { rec.id=b.id; data.billProviders.push(rec); } }
+      else { rec.id=uid('bp'); data.billProviders.push(rec); }
+      saveData(); return send(res,200,{ ok:true, providers:data.billProviders });
+    }
+    if (url === '/api/bills/provider/delete' && req.method === 'POST'){
+      const b = await readBody(req); data.billProviders=(data.billProviders||[]).filter(p=>p.id!==b.id);
+      saveData(); return send(res,200,{ ok:true, providers:data.billProviders });
+    }
     // Confirm applies the detected amount to the matching recurring bill (creates it if missing).
     if (url === '/api/bills/detection/confirm' && req.method === 'POST'){
       const b = await readBody(req); const d=(data.billDetections||{})[b.key];
@@ -3200,10 +3219,11 @@ const server = http.createServer(async (req, res)=>{
       if(d.amount==null) return send(res,400,{error:'This bill email has no amount to confirm - enter it manually.'});
       const mf = data.manualFinance = data.manualFinance || {}; mf.recurring = mf.recurring || [];
       const nm = String(d.matchName||d.provider).trim().toLowerCase();
+      const atype = (d.type==='fixed'?'fixed':'variable'); const lag=(d.serviceLagMonths!=null?Number(d.serviceLagMonths):1);
       let it = mf.recurring.find(x=>x.book===d.book && (x.name||'').trim().toLowerCase()===nm);
-      if(it){ it.amount=d.amount; it.amountType='variable'; if(!it.provider)it.provider=d.provider; if(d.accountNo)it.accountNo=d.accountNo; if(it.active===false)it.active=true; }
+      if(it){ it.amount=d.amount; it.amountType=atype; it.serviceLagMonths=lag; if(!it.provider)it.provider=d.provider; if(d.accountNo)it.accountNo=d.accountNo; if(it.active===false)it.active=true; }
       else { it={ id:uid('rc'), book:d.book, name:d.matchName||d.provider, category:d.category||'Utilities',
-        frequency:'monthly', amount:d.amount, amountType:'variable', startDate:(d.dueDate||new Date().toISOString().slice(0,10)),
+        frequency:'monthly', amount:d.amount, amountType:atype, serviceLagMonths:lag, startDate:(d.dueDate||new Date().toISOString().slice(0,10)),
         reminderDays:3, active:true, paused:false, provider:d.provider, accountNo:d.accountNo||'' };
         mf.recurring.push(it); }
       // Record the DATED occurrence so date-wise finance uses this month's actual amount. Aligns the bill's
