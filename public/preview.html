@@ -1488,6 +1488,10 @@ function pnlRow(label,val,strong){const neg=val<0;return `<div class="drow" styl
 /* ---- Bills detected from email (Con Edison etc.): confirm the amount in one tap ---- */
 function financeDetectedBills(){
   let all=Object.values(S.billDetections||{}).filter(d=>d&&d.status==='new');
+  // Hide a receipt (payment) when the same provider has a bill for the same amount - the bill is the one to
+  // confirm, and confirming it auto-marks the receipt paid. Receipt-only vendors (no matching bill) stay visible.
+  const billAmts=new Set(all.filter(d=>d.kind!=='payment'&&d.amount!=null).map(d=>d.providerId+'|'+Math.round(Number(d.amount))));
+  all=all.filter(d=> d.kind!=='payment' || !billAmts.has(d.providerId+'|'+Math.round(Number(d.amount))));
   // A utility sends several emails per cycle (bill ready, reminder, autopay). Collapse to one row per
   // actual bill: group amount-bearing emails by provider+amount (keep the one that also has a due date);
   // group amount-less notices by provider+month, and drop them when that provider already has an amount.
@@ -1541,10 +1545,11 @@ function billProviderCancelEdit(){ billEditId=null; billProvidersModal(); }
 function billProvidersModal(){
   const provs=S.billProviders||[]; const cats=['Utilities','Software','Rent','Insurance','Payroll','Marketing','Loan/Debt','Tax','Other'];
   const ed = billEditId ? provs.find(p=>p.id===billEditId) : null; const sel=(v,x)=>v===x?' selected':'';
-  const rows=provs.map(p=>`<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)${p.id===billEditId?';background:#f4f8ff':''}">
+  const rows=provs.map(p=>`<div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)${p.id===billEditId?';background:#f4f8ff':''}">
      <div><b>${esc(p.name)}</b><div class="sub" style="font-size:11px">${esc((p.senders||[]).join(', '))} · ${esc(p.category||'')} · ${p.type==='fixed'?'Fixed':'Variable'} · ${p.book==='phone'?'Phone':'General'} · ${Number(p.serviceLagMonths)===0?'in advance':'last month'}</div></div>
      <label class="sub" style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap"><input type="checkbox" ${p.active!==false?'checked':''} onchange="billProviderToggle('${p.id}',this.checked)"> Active</label>
      <button class="btn sec sm" onclick="billProviderEdit('${p.id}')">Edit</button>
+     <button class="btn sec sm" onclick="billProviderResetData('${p.id}')" title="Clear this provider's detected bills + history and rebuild from a fresh scan">Reset</button>
      <button class="btn sec sm" onclick="billProviderDelete('${p.id}')">Remove</button></div>`).join('');
   const quick=BILL_TEMPLATES.map((t,i)=>`<button class="btn sec sm" onclick="billProviderQuickAdd(${i})">+ ${esc(t[0])}</button>`).join(' ');
   document.getElementById('mdl').innerHTML=`<div class="mh"><b>Tracked email providers</b><button class="x" onclick="billEditId=null;closeModal()">×</button></div>
@@ -1570,6 +1575,7 @@ async function billProviderSave(){ const name=val('bp_name'); const senders=val(
   const body={name,senders,category:val('bp_cat'),type:val('bp_type'),book:val('bp_book'),serviceLagMonths:Number(val('bp_lag')||1)}; if(billEditId)body.id=billEditId;
   try{ const r=await fetch('/api/bills/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json(); if(j.error){toast(j.error);return;} const wasEdit=!!billEditId; billEditId=null; await load(); billProvidersModal(); toast(wasEdit?('Updated '+name):('Added '+name)); }catch(e){ toast('Failed'); } }
 async function billProviderDelete(id){ if(!confirm('Remove this provider? Bills you already confirmed stay in Finance.'))return; try{ await fetch('/api/bills/provider/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}); await load(); billProvidersModal(); }catch(e){} }
+async function billProviderResetData(id){ const p=(S.billProviders||[]).find(x=>x.id===id); if(!confirm('Clear all detected bills, recorded amounts and paid history for '+(p?p.name:'this provider')+'? The provider itself stays. Then hit "Scan inbox now" to rebuild it cleanly.'))return; try{ await fetch('/api/bills/provider/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}); await load(); billProvidersModal(); toast('Cleared '+(p?p.name:'')+' - now Scan inbox to rebuild'); }catch(e){ toast('Failed'); } }
 async function billProviderToggle(id,active){ const p=(S.billProviders||[]).find(x=>x.id===id); if(!p)return; try{ await fetch('/api/bills/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({},p,{active}))}); await load(); }catch(e){} }
 async function billProviderQuickAdd(i){ const t=BILL_TEMPLATES[i]; if(!t)return; try{ await fetch('/api/bills/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:t[0],senders:t[1],category:t[2],type:t[3],book:'general',serviceLagMonths:1})}); await load(); billProvidersModal(); toast('Added '+t[0]); }catch(e){} }
 function financeOverview(){

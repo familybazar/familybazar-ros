@@ -3250,6 +3250,16 @@ const server = http.createServer(async (req, res)=>{
       const b = await readBody(req); data.billProviders=(data.billProviders||[]).filter(p=>p.id!==b.id);
       saveData(); return send(res,200,{ ok:true, providers:data.billProviders });
     }
+    // Wipe one provider's detections + its recorded bill occurrences so a re-scan rebuilds it cleanly.
+    if (url === '/api/bills/provider/reset' && req.method === 'POST'){
+      const b = await readBody(req); const prov=(data.billProviders||[]).find(p=>p.id===b.id);
+      if(!prov) return send(res,404,{error:'not found'});
+      for(const k in (data.billDetections||{})){ if(data.billDetections[k] && data.billDetections[k].providerId===prov.id) delete data.billDetections[k]; }
+      const mf=data.manualFinance||{}; const nm=String(prov.matchName||prov.name).trim().toLowerCase();
+      const it=(mf.recurring||[]).find(x=>x.book===(prov.book||'general') && (x.name||'').trim().toLowerCase()===nm);
+      if(it && mf.payments){ for(const k in mf.payments){ if(k.indexOf(it.id+'|')===0) delete mf.payments[k]; } it.amount=0; }
+      saveData(); return send(res,200,{ ok:true });
+    }
     // Confirm applies the detected amount to the matching recurring bill (creates it if missing).
     if (url === '/api/bills/detection/confirm' && req.method === 'POST'){
       const b = await readBody(req); const d=(data.billDetections||{})[b.key];
@@ -3275,6 +3285,9 @@ const server = http.createServer(async (req, res)=>{
       if(!isPayment){ const amtR2=Math.round(Number(d.amount));
         const paidDet=Object.values(data.billDetections).find(x=>x&&x.kind==='payment'&&x.providerId===d.providerId&&x.amount!=null&&Math.round(Number(x.amount))===amtR2);
         if(paidDet && mf.payments[okey]){ mf.payments[okey].status='paid'; mf.payments[okey].paidDate=paidDet.paidDate||mf.payments[okey].dueDate; paidDet.status='applied'; paidDet.appliedTo=okey; } }
+      // Keep the bill's headline amount = the NEWEST month's actual amount, so the expense list shows the
+      // current bill rather than whichever month happened to be confirmed last.
+      { let latestD='', latestA=null; for(const k in mf.payments){ if(k.indexOf(it.id+'|')!==0)continue; const ds=k.slice(k.indexOf('|')+1); const p=mf.payments[k]; if(p&&p.amount!=null&&ds>latestD){ latestD=ds; latestA=Number(p.amount); } } if(latestA!=null) it.amount=latestA; }
       d.status='confirmed'; d.appliedTo=it.id; d.appliedAt=now();
       // Collapse the other emails for the same bill (reminder/autopay/duplicate) so they stop showing.
       const amtR=Math.round(Number(d.amount));
