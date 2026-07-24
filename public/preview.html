@@ -1038,17 +1038,22 @@ function mfIcon(name,size,color){ const s=size||18,c=color||'currentColor';
     calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>',
     chart:'<path d="M4 19V6M9 19v-9M14 19v-5M19 19V9M3 20h18"/>' }[name]||'';
   return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none">${P}</svg>`; }
-/* ---- inline handlers ---- */
+/* ---- inline handlers (edits stage in memory; the Save button persists) ---- */
+let mfSaveStamp=0;
+function mfSaveCash(){ save(); mfDirty=false; mfSaveStamp=Date.now(); render(); }
+function mfSaveStatus(){ if(mfDirty) return 'Unsaved changes'; if(mfSaveStamp) return 'Saved '+fTimeAgo(mfSaveStamp); return 'All changes saved'; }
 function mfSetDay(book,field,v){ const mf=mfEnsure(); const rec=mf.days[mfDate]||(mf.days[mfDate]={general:{},phone:{}});
   const num=(v===''?'':Number(v));
   if(book==='phone'){ rec.phone=rec.phone||{}; if(field==='gpPct')rec.phone.gpPct=num; else {rec.phone.sales=rec.phone.sales||{}; rec.phone.sales[field]=num;} }
   else { rec.general=rec.general||{}; rec.general[field]=num; }
-  rec.updatedAt=new Date().toISOString(); mfDirty=false; save(); render(); }
-function mfExpSetAmt(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.amount=Number(v)||0; save(); render(); }
-function mfExpSetFreq(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.frequency=v; if(!it.startDate)it.startDate=mfTodayStr(); save(); render(); }
-function mfExpRename(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.name=v; save(); }
+  rec.updatedAt=new Date().toISOString(); mfDirty=true; render(); }
+function mfExpSetAmt(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.amount=Number(v)||0; mfDirty=true; render(); }
+function mfExpSetFreq(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.frequency=v; if(!it.startDate)it.startDate=mfTodayStr(); mfDirty=true; render(); }
+function mfExpRename(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(!it)return; it.name=v; mfDirty=true; }
 function mfExpAdd(book,freq){ recPrefill={book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:'',startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true}; mfRecModal(); }
-function mfExpRemove(id){ if(!confirm('Remove this expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=(mf.recurring||[]).filter(x=>x.id!==id); save(); render(); toast('Removed'); }
+function mfExpRemove(id){ if(!confirm('Remove this expense? Its payment history is kept.'))return; const mf=mfEnsure(); mf.recurring=(mf.recurring||[]).filter(x=>x.id!==id); mfDirty=true; render(); }
+// Toggle a bill's paid status inline from its status badge (stages; Save persists).
+function mfCashTogglePaid(id,nd){ const key=mfOccKey(id,nd); const mf=mfEnsure(); const o=mf.payments[key]; if(o&&o.status==='paid'){ delete mf.payments[key]; } else { mfRecordPay(id,nd,null); } mfDirty=true; render(); }
 // Prepared common-bill catalog per book+frequency - owner just fills amount/due/paid (no modal).
 const MF_PRESETS={
   general:{ daily:[], weekly:['Employee Pay'], biweekly:['Employee Pay'],
@@ -1059,11 +1064,11 @@ const MF_PRESETS={
 };
 function mfFindExp(book,name,freq){ return (mfEnsure().recurring||[]).find(x=>x.book===book&&(x.name||'').trim().toLowerCase()===String(name).trim().toLowerCase()&&x.frequency===freq); }
 function mfExpEnsure(book,name,freq){ let it=mfFindExp(book,name,freq); if(!it){ it={id:uid('rc'),book,name,category:'Other',frequency:freq,amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}; mfEnsure().recurring.push(it); } return it; }
-function mfPresetAmt(book,name,freq,v){ const num=Number(v)||0; let it=mfFindExp(book,name,freq); if(!it){ if(!num)return; it=mfExpEnsure(book,name,freq); } it.preset=it.preset||name; it.amount=num; save(); render(); }
-function mfPresetDue(book,name,freq,v){ if(!v)return; const it=mfExpEnsure(book,name,freq); it.preset=it.preset||name; it.startDate=v; save(); render(); }
-function mfExpSetDue(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(it&&v)it.startDate=v; save(); render(); }
-function mfExpAddInline(book,freq){ mfEnsure().recurring.push({id:uid('rc'),book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}); save(); render(); }
-function mfPresetRename(book,presetName,freq,newName){ const nm=(newName||'').trim(); const it=mfExpEnsure(book,presetName,freq); it.preset=it.preset||presetName; it.name=nm||presetName; save(); render(); }
+function mfPresetAmt(book,name,freq,v){ const num=Number(v)||0; let it=mfFindExp(book,name,freq); if(!it){ if(!num)return; it=mfExpEnsure(book,name,freq); } it.preset=it.preset||name; it.amount=num; mfDirty=true; render(); }
+function mfPresetDue(book,name,freq,v){ if(!v)return; const it=mfExpEnsure(book,name,freq); it.preset=it.preset||name; it.startDate=v; mfDirty=true; render(); }
+function mfExpSetDue(id,v){ const it=(mfEnsure().recurring||[]).find(x=>x.id===id); if(it&&v)it.startDate=v; mfDirty=true; render(); }
+function mfExpAddInline(book,freq){ mfEnsure().recurring.push({id:uid('rc'),book,name:'',category:'Other',frequency:(freq&&freq!=='all')?freq:'monthly',amount:0,startDate:mfTodayStr(),amountType:'fixed',reminderDays:3,active:true,paused:false}); mfDirty=true; render(); }
+function mfPresetRename(book,presetName,freq,newName){ const nm=(newName||'').trim(); const it=mfExpEnsure(book,presetName,freq); it.preset=it.preset||presetName; it.name=nm||presetName; mfDirty=true; render(); }
 /* ---- Global bills-due popover (top notification, redirectable) ---- */
 function mfToggleBell(){ mfBellOpen=!mfBellOpen; render(); }
 function mfBellHtml(){ const r=mfReminders(); const n=r.over.length+r.due.length; const rows=[...r.over.map(o=>['Overdue',o]),...r.due.map(o=>['Due today',o])];
@@ -1085,76 +1090,94 @@ function mfBellHtml(){ const r=mfReminders(); const n=r.over.length+r.due.length
     .bell-nm .sub{font-weight:400;font-size:11px}
     .bell-up{margin-top:8px;font-size:12px;font-weight:700;color:#4f6ef7;cursor:pointer}</style>`; }
 function mfCashCSS(){ return `<style>
-  .mf-wrap{--nav:#14213d;--nav2:#1e2f52;--gd:#2f9e6b;--ph:#4f6ef7;--amber:#b07508;--red:#c0483f;--line:#e6e9f0;--mut:#8a93a6}
+  .mf-wrap{--nav:#14213d;--ink:#1a2338;--gd:#12855a;--ph:#4f6ef7;--mut:#8a93a6;--line:#edf0f5;--soft:#f6f8fb}
+  .mf-wrap *{box-sizing:border-box}
+  .mf-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:18px}
+  .mf-h1{font-size:24px;font-weight:800;letter-spacing:-.5px;color:var(--ink);margin:0}
+  .mf-subt{font-size:12.5px;color:var(--mut);margin-top:3px}
+  .mf-topr{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .mf-datenav{display:flex;align-items:center;gap:6px}
+  .mf-navb{border:1px solid var(--line);background:#fff;border-radius:10px;height:36px;padding:0 12px;font-size:13px;font-weight:600;color:#54607a;cursor:pointer}
+  .mf-date{border:1px solid var(--line);border-radius:10px;height:36px;padding:0 10px;font-size:13px;color:#54607a;background:#fff}
+  .mf-savewrap{display:flex;align-items:center;gap:11px}
+  .mf-savetxt{font-size:12px;color:var(--mut)}
+  .mf-savetxt.dirty{color:#b07508;font-weight:600}
+  .mf-savebtn{border:0;border-radius:10px;height:38px;padding:0 22px;font-size:14px;font-weight:700;cursor:pointer;background:#e9edf5;color:#a3abbb;transition:.12s}
+  .mf-savebtn.on{background:var(--ph);color:#fff;box-shadow:0 2px 10px rgba(79,110,247,.30)}
+  .mf-kpihd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:13px}
+  .mf-kpittl{font-size:12px;font-weight:800;letter-spacing:.5px;color:#7a8296;text-transform:uppercase}
   .mf-seg{display:inline-flex;background:#eef1f7;border-radius:11px;padding:3px;gap:2px}
-  .mf-seg button{border:0;background:transparent;padding:7px 15px;border-radius:8px;font-size:13px;font-weight:700;color:#5a6478;cursor:pointer}
+  .mf-seg button{border:0;background:transparent;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:700;color:#5a6478;cursor:pointer}
   .mf-seg button.on{background:#fff;color:var(--nav);box-shadow:0 1px 3px rgba(20,33,61,.12)}
-  .mf-estwrap{background:linear-gradient(160deg,#16264a,#0f1b34);border-radius:16px;padding:16px 18px;color:#eaf0ff;margin:10px 0 14px}
-  .mf-esthd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px}
-  .mf-esttitle{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:.3px}
-  .mf-esttiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-  .mf-tile{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:11px 13px}
-  .mf-tile .k{font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:#9fb0d4}
-  .mf-tile .v{font-size:19px;font-weight:800;margin-top:3px;letter-spacing:-.4px}
-  .mf-tile.net{background:rgba(79,110,247,.18);border-color:rgba(120,150,255,.4)}
-  .mf-note{font-size:11.5px;color:#9fb0d4;margin-top:11px;display:flex;align-items:center;gap:6px}
-  .mf-wait{font-size:12px;color:#cdd8f2;margin-top:8px}
-  .mf-wait b{color:#fff}
-  .mf-remind{margin-bottom:14px;border-color:#f2dfae;background:#fffdf6}
-  .mf-remhd{display:flex;align-items:center;gap:8px;font-weight:800;color:#5a4a17}
-  .mf-remlbl{margin-top:9px;font-weight:800;font-size:11px;letter-spacing:.4px;text-transform:uppercase}
-  .mf-remrow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:6px 0;border-top:1px solid #eee}
-  .mf-remrow .sub{font-size:11px}
-  .mf-books{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-top:4px}
-  .mf-book{overflow:hidden}
-  .mf-bookhd{display:flex;align-items:center;gap:10px;padding:14px 16px 12px}
-  .mf-bookicon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center}
-  .mf-bookicon.general{background:#e7f6ee}.mf-bookicon.phone{background:#eaefff}
-  .mf-booktitle{font-weight:800;font-size:16px;color:var(--nav)}
-  .mf-booktag{margin-left:auto;font-size:11px;font-weight:700;color:#6b7280;background:#f1f3f8;padding:4px 9px;border-radius:20px}
-  .mf-stat{background:linear-gradient(160deg,#16264a,#0f1b34);color:#eaf0ff;margin:0 16px;border-radius:13px;padding:14px 16px}
-  .mf-statrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:11px}
-  .mf-statk{font-size:11px;letter-spacing:.3px;text-transform:uppercase;color:#9fb0d4}
-  .mf-statv{font-size:16px;font-weight:700;margin-top:2px}
-  .mf-statnet{display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(255,255,255,.12);padding-top:11px}
-  .mf-netbig{font-size:26px;font-weight:800;letter-spacing:-.6px}
-  .mf-body{padding:14px 16px 16px}
-  .mf-lbl{font-size:12px;color:var(--mut);margin:0 0 4px;font-weight:600}
-  .mf-sec{font-weight:800;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#9aa1ad;margin:16px 0 9px;display:flex;justify-content:space-between;align-items:center}
-  .mf-sec .amt{color:var(--nav);font-size:13px}
+  .mf-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+  .mf-kpi{background:#fff;border:1px solid var(--line);border-radius:16px;padding:17px 19px}
+  .mf-kpi .k{font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--mut);font-weight:700}
+  .mf-kpi .v{font-size:24px;font-weight:800;letter-spacing:-.6px;margin-top:7px;color:var(--ink)}
+  .mf-kpi.green .v{color:var(--gd)}
+  .mf-kpi.net{background:linear-gradient(160deg,#1c2d54,#111d38);border-color:transparent}
+  .mf-kpi.net .k{color:#9fb0d4}
+  .mf-kpi.net .v{color:#fff}
+  .mf-books{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px}
+  .mf-book{background:#fff;border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:0 1px 2px rgba(20,33,61,.04)}
+  .mf-bookhd{display:flex;align-items:center;gap:11px;margin-bottom:16px}
+  .mf-bookicon{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center}
+  .mf-bookicon.general{background:#e6f6ee}.mf-bookicon.phone{background:#ecefff}
+  .mf-booktitle{font-weight:800;font-size:17px;color:var(--ink)}
+  .mf-booktag{margin-left:auto;font-size:11px;font-weight:700;color:#6b7280;background:var(--soft);padding:5px 11px;border-radius:20px}
+  .mf-stat{background:linear-gradient(160deg,#1c2d54,#111d38);color:#eaf0ff;border-radius:16px;padding:18px 20px;margin-bottom:20px}
+  .mf-statgrid{display:grid;grid-template-columns:1fr 1fr;gap:15px 10px;margin-bottom:15px}
+  .mf-statk{font-size:10.5px;letter-spacing:.3px;text-transform:uppercase;color:#9fb0d4}
+  .mf-statv{font-size:17px;font-weight:700;margin-top:3px}
+  .mf-statnet{display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid rgba(255,255,255,.13);padding-top:15px}
+  .mf-netbig{font-size:30px;font-weight:800;letter-spacing:-.8px;line-height:1}
+  .mf-sec{font-weight:800;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#9aa1ad;margin:22px 0 12px;display:flex;justify-content:space-between;align-items:center}
+  .mf-sec .amt{color:var(--ink);font-size:13px;text-transform:none;letter-spacing:0}
+  .mf-lbl{font-size:12px;color:var(--mut);margin:0 0 5px;font-weight:600}
   .mf-inp{position:relative}
-  .mf-inp>span{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#9aa1ad;font-size:14px;pointer-events:none}
-  .mf-inp input{width:100%;padding:10px 12px 10px 22px;border:1px solid var(--line);border-radius:10px;font-size:15px;text-align:right;background:#fff}
-  .mf-inp.pct input{padding:10px 24px 10px 12px}
-  .mf-inp.pct>span{left:auto;right:12px}
-  .mf-etabs{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
-  .mf-etab{border:1px solid var(--line);background:#fff;padding:5px 11px;border-radius:20px;font-size:12px;font-weight:700;color:#5a6478;cursor:pointer}
-  .mf-etab.on{background:var(--nav);border-color:var(--nav);color:#fff}
-  .mf-etab .b{display:inline-block;margin-left:5px;background:#ffe1b0;color:#8a5a00;border-radius:10px;padding:0 6px;font-size:10px}
-  .mf-etab.on .b{background:rgba(255,255,255,.25);color:#fff}
-  .mf-etab .mf-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#d94b40;margin-left:6px;vertical-align:middle}
-  .mf-etab.on .mf-dot{background:#ffc4bf}
-  .mf-exprow{display:grid;grid-template-columns:1fr 96px 104px auto 26px;gap:7px;align-items:center;margin-bottom:7px}
-  .mf-expname{border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:14px;background:#fff;min-width:0}
-  .mf-freq{border:1px solid var(--line);border-radius:9px;padding:9px 6px;font-size:12.5px;background:#fff;color:#3d4353}
-  .mf-paid,.mf-due{border:0;border-radius:9px;padding:9px 8px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:4px;justify-content:center}
-  .mf-paid{background:#e7f6ee;color:#227a4e}.mf-due{background:#fff3e0;color:#a4600a}
-  .mf-x{border:0;background:transparent;cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center}
-  .mf-addbtn{border:1px dashed #c9cfdd;background:#fafbfe;color:#4f6ef7;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin-top:8px}
-  .mf-exphead{display:grid;grid-template-columns:1fr 96px 132px 118px 26px;gap:8px;font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#9aa1ad;font-weight:800;padding:2px 2px 7px}
-  .mf-exprow2{display:grid;grid-template-columns:1fr 96px 132px 118px 26px;gap:8px;align-items:center;margin-bottom:7px}
-  .mf-namewrap{display:flex;align-items:center;gap:6px;min-width:0}
-  .mf-expname.preset{background:#f6f8fc;color:#3d4353;font-weight:600;border-color:#eceff5}
-  .mf-fchip{font-size:9.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:#6b7280;background:#eef1f7;border-radius:20px;padding:2px 7px;white-space:nowrap}
-  .mf-duein{border:1px solid var(--line);border-radius:9px;padding:8px 8px;font-size:12.5px;background:#fff;color:#3d4353;width:100%}
-  .mf-hint{font-size:11px;color:#9aa1ad;text-align:center;align-self:center}
-  @media(max-width:560px){.mf-esttiles{grid-template-columns:1fr 1fr}
+  .mf-inp>span{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#a3abbb;font-size:15px;pointer-events:none}
+  .mf-inp input{width:100%;height:44px;padding:0 14px 0 26px;border:1px solid var(--line);border-radius:12px;font-size:15px;text-align:right;background:var(--soft);transition:border-color .12s,background .12s}
+  .mf-inp input:focus{outline:0;border-color:var(--ph);background:#fff}
+  .mf-inp.pct input{padding:0 26px 0 14px}
+  .mf-inp.pct>span{left:auto;right:13px}
+  .mf-salesrow{display:grid;grid-template-columns:1fr 150px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+  .mf-salesrow:last-child{border-bottom:0}
+  .mf-salesrow .lab{font-size:14px;color:#3d4353}
+  .mf-etabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+  .mf-etab{position:relative;border:1px solid var(--line);background:#fff;padding:7px 14px;border-radius:20px;font-size:12.5px;font-weight:700;color:#5a6478;cursor:pointer}
+  .mf-etab.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .mf-etab .mf-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#e0483d;margin-left:7px;vertical-align:middle}
+  .mf-etab.on .mf-dot{background:#ff9d95}
+  .mf-exphead{display:grid;grid-template-columns:1fr 120px 128px 24px;gap:12px;font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#a3abbb;font-weight:700;padding:0 2px 8px}
+  .mf-exprow2{display:grid;grid-template-columns:1fr 120px 128px 24px;gap:12px;align-items:center;padding:8px 2px}
+  .mf-exprow2+.mf-exprow2{border-top:1px solid #f4f6fa}
+  .mf-namewrap{min-width:0}
+  .mf-expname{border:0;background:transparent;padding:6px 2px;font-size:14.5px;font-weight:600;color:var(--ink);width:100%;min-width:0}
+  .mf-expname:focus{outline:0}
+  .mf-expname::placeholder{color:#b8bfcc;font-weight:400}
+  .mf-amtin{position:relative}
+  .mf-amtin>span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#a3abbb;font-size:14px;pointer-events:none}
+  .mf-amtin input{width:100%;height:40px;padding:0 12px 0 24px;border:1px solid var(--line);border-radius:11px;font-size:14.5px;text-align:right;background:var(--soft)}
+  .mf-amtin input:focus{outline:0;border-color:var(--ph);background:#fff}
+  .mf-badge{display:inline-flex;align-items:center;gap:6px;border:0;cursor:pointer;background:transparent;font-size:12.5px;font-weight:700;padding:6px 4px;border-radius:8px}
+  .mf-badge .d{width:8px;height:8px;border-radius:50%;flex:none}
+  .mf-badge.paid{color:var(--gd)} .mf-badge.paid .d{background:var(--gd)}
+  .mf-badge.due{color:#d0483e} .mf-badge.due .d{background:#d0483e}
+  .mf-badge.wait{color:#a3abbb;cursor:default} .mf-badge.wait .d{background:#d6dbe4}
+  .mf-badge.perday{color:#7b8496;cursor:default} .mf-badge.perday .d{background:#c7cede}
+  .mf-x{border:0;background:transparent;cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center;opacity:.5}
+  .mf-x:hover{opacity:1}
+  .mf-addbtn{border:0;background:transparent;color:var(--ph);padding:12px 2px 2px;font-size:13.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+  @media(max-width:560px){
+    .mf-kpis{grid-template-columns:1fr 1fr;gap:12px}
+    .mf-books{grid-template-columns:1fr}
     .mf-exphead{display:none}
-    .mf-exprow2{grid-template-columns:1fr 88px;grid-auto-rows:auto;row-gap:6px;border:1px solid var(--line);border-radius:11px;padding:9px;background:#fcfcfe}
-    .mf-exprow2 .mf-namewrap{grid-column:1/3}
-    .mf-exprow2 .mf-duein{grid-column:1/2}
-    .mf-exprow2 .mf-paid,.mf-exprow2 .mf-due{grid-column:2/3}
-    .mf-exprow2 .mf-x{grid-column:2/3;justify-self:end}}
+    .mf-exprow2{grid-template-columns:1fr auto;grid-auto-rows:auto;row-gap:9px;padding:12px;border:1px solid var(--line);border-radius:14px;margin-bottom:8px}
+    .mf-exprow2+.mf-exprow2{border-top:1px solid var(--line)}
+    .mf-namewrap{grid-column:1/3}
+    .mf-amtin{grid-column:1/2}
+    .mf-badge{grid-column:2/3;justify-self:end}
+    .mf-x{grid-column:2/3;justify-self:end;margin-top:-4px}
+  }
   </style>`; }
 function viewCashEntry(){
   if(!mfBeforeBound){ window.addEventListener('beforeunload',e=>{ if(mfDirty){e.preventDefault();e.returnValue='';} }); mfBeforeBound=true; }
@@ -1164,27 +1187,23 @@ function viewCashEntry(){
   const dim=mfDaysInMonthNow(), diy=mfDaysInYearNow();
   const money0=v=>money2(v);
   const perBtn=(k,l)=>`<button class="${period===k?'on':''}" onclick="mfEstPeriod='${k}';render()">${l}</button>`;
-  const estWrap=`<div class="mf-estwrap">
-     <div class="mf-esthd">
-       <div class="mf-esttitle">${mfIcon('chart',17,'#9fb0d4')} Combined business estimate</div>
-       <div class="mf-seg">${perBtn('daily','Daily')}${perBtn('weekly','Weekly')}${perBtn('monthly','Monthly')}${perBtn('yearly','Yearly')}</div>
-     </div>
-     <div class="mf-esttiles">
-       <div class="mf-tile"><div class="k">Total sales</div><div class="v">${money0(cb.sales)}</div></div>
-       <div class="mf-tile"><div class="k">Gross profit</div><div class="v">${money0(cb.gp)}</div></div>
-       <div class="mf-tile"><div class="k">Expenses</div><div class="v">${money0(cb.exp)}</div></div>
-       <div class="mf-tile net"><div class="k">Net profit / ${per}</div><div class="v" style="color:${cb.net>=0?'#8ef0b6':'#ffb3ad'}">${money0(cb.net)}</div></div>
-     </div>
-   </div>`;
+  const kpis=`<div class="mf-kpihd"><div class="mf-kpittl">Combined estimate</div>
+       <div class="mf-seg">${perBtn('daily','Daily')}${perBtn('weekly','Weekly')}${perBtn('monthly','Monthly')}${perBtn('yearly','Yearly')}</div></div>
+     <div class="mf-kpis">
+       <div class="mf-kpi"><div class="k">Total sales</div><div class="v">${money2(cb.sales)}</div></div>
+       <div class="mf-kpi green"><div class="k">Gross profit</div><div class="v">${money2(cb.gp)}</div></div>
+       <div class="mf-kpi"><div class="k">Expenses</div><div class="v">${money2(cb.exp)}</div></div>
+       <div class="mf-kpi net"><div class="k">Net profit / ${per}</div><div class="v">${money2(cb.net)}</div></div>
+     </div>`;
   const inpMoney=(bk,field,val)=>`<div class="mf-inp"><span>$</span><input type="number" inputmode="decimal" step="0.01" value="${val!=null&&val!==''?val:''}" placeholder="0" onchange="mfSetDay('${bk}','${field}',this.value)"></div>`;
   const inpPct=(bk,val)=>`<div class="mf-inp pct"><input type="number" inputmode="decimal" step="0.1" value="${val!=null&&val!==''?val:''}" placeholder="${mfDefGp()}" onchange="mfSetDay('${bk}','gpPct',this.value)"><span>%</span></div>`;
-  const salesGeneral=`<div style="display:grid;grid-template-columns:1fr 110px;gap:10px">
+  const salesGeneral=`<div style="display:grid;grid-template-columns:1fr 120px;gap:12px">
        <div><div class="mf-lbl">Sales amount (today)</div>${inpMoney('general','sales',g.sales)}</div>
        <div><div class="mf-lbl">Profit %</div>${inpPct('general',g.gpPct)}</div>
      </div>`;
   const phFields=[['phone','Phone sales'],['accessory','Accessory sales'],['repair','Repair income'],['service','Other service income'],['otherSales','Other sales']];
-  const salesPhone=`<div style="display:grid;gap:8px">${phFields.map(f=>`<div style="display:grid;grid-template-columns:1fr 130px;gap:10px;align-items:center"><span style="font-size:13.5px;color:#3d4353">${f[1]}</span>${inpMoney('phone',f[0],ps[f[0]])}</div>`).join('')}
-     <div style="max-width:150px;margin-top:2px"><div class="mf-lbl">Profit %</div>${inpPct('phone',p.gpPct)}</div></div>`;
+  const salesPhone=`<div>${phFields.map(f=>`<div class="mf-salesrow"><span class="lab">${f[1]}</span>${inpMoney('phone',f[0],ps[f[0]])}</div>`).join('')}
+     <div class="mf-salesrow"><span class="lab">Profit %</span>${inpPct('phone',p.gpPct)}</div></div>`;
   const expBlock=(book)=>{ const items=(mf.recurring||[]).filter(it=>it.book===book&&!it.paused);
      const cur=mfExpTab[book]||'monthly';
      const tabs=[['daily','Daily'],['weekly','Weekly'],['biweekly','Bi-weekly'],['monthly','Monthly'],['yearly','Yearly'],['once','One-time']];
@@ -1197,65 +1216,64 @@ function viewCashEntry(){
         const existingBlank=ex.some(it=>(it.name||'').trim() && !(Number(it.amount)>0));
         return presetsMissing||existingBlank; };
      const tabBtns=tabs.map(t=>`<button class="mf-etab${cur===t[0]?' on':''}" onclick="mfExpTab.${book}='${t[0]}';render()">${t[1]}${dotFor(t[0])?'<span class="mf-dot"></span>':''}</button>`).join('');
+     const statusCell=(it,freq)=>{
+        if(freq==='daily') return `<span class="mf-badge perday"><span class="d"></span>${it&&Number(it.amount)>0?'Per day':'Enter amount'}</span>`;
+        if(!it||!(Number(it.amount)>0)) return `<span class="mf-badge wait"><span class="d"></span>Enter amount</span>`;
+        const nd=mfNextDue(it); const o=nd?mfOcc(it.id,nd):null; const paid=o&&o.status==='paid';
+        if(!nd) return `<span class="mf-badge wait"><span class="d"></span>-</span>`;
+        if(paid){ const pt=o.paidDate?(' '+new Date(o.paidDate+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})):''; return `<button class="mf-badge paid" onclick="mfCashTogglePaid('${it.id}','${nd}')"><span class="d"></span>Paid${pt}</button>`; }
+        return `<button class="mf-badge due" onclick="mfCashTogglePaid('${it.id}','${nd}')"><span class="d"></span>Due</button>`; };
      const rowFor=(it,presetName,freq)=>{
-        const nd=it?mfNextDue(it):null; const o=(it&&nd)?mfOcc(it.id,nd):null; const paid=o&&o.status==='paid';
-        const paidTxt=paid&&o.paidDate?(' '+new Date(o.paidDate+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})):'';
-        const amtVal=it&&it.amount?it.amount:''; const dueVal=it&&it.startDate?it.startDate:'';
+        const amtVal=it&&it.amount?it.amount:'';
         const nameCell=it
           ?`<input class="mf-expname" value="${esc(it.name||'')}" placeholder="Expense name" onchange="mfExpRename('${it.id}',this.value)">`
-          :`<input class="mf-expname preset" value="${esc(presetName)}" data-p="${esc(presetName)}" onchange="mfPresetRename('${book}',this.dataset.p,'${freq}',this.value)">`;
+          :`<input class="mf-expname" value="${esc(presetName)}" data-p="${esc(presetName)}" onchange="mfPresetRename('${book}',this.dataset.p,'${freq}',this.value)">`;
         const amtOn=it?`mfExpSetAmt('${it.id}',this.value)`:`mfPresetAmt('${book}',this.dataset.n,'${freq}',this.value)`;
-        const dueOn=it?`mfExpSetDue('${it.id}',this.value)`:`mfPresetDue('${book}',this.dataset.n,'${freq}',this.value)`;
         const dataN=it?'':` data-n="${esc(presetName)}"`;
-        const paidCell=freq==='daily'
-          ?`<span class="mf-hint">${it&&Number(it.amount)>0?'per day':'Enter amount'}</span>`
-          :((it&&nd)?(paid?`<button class="mf-paid" onclick="mfUnpay('${it.id}','${nd}')">${mfIcon('check',12,'#227a4e')}Paid${paidTxt}</button>`:`<button class="mf-due" onclick="mfMarkPaid('${it.id}','${nd}')">Mark paid</button>`):`<span class="mf-hint">Enter amount</span>`);
         const del=it?`<button class="mf-x" onclick="mfExpRemove('${it.id}')">${mfIcon('trash',15,'#9aa1ad')}</button>`:`<span></span>`;
         return `<div class="mf-exprow2">
            <div class="mf-namewrap">${nameCell}</div>
-           <div class="mf-inp"><span>$</span><input type="number" inputmode="decimal" step="0.01"${dataN} value="${amtVal}" placeholder="${mfPh(freq)}" onchange="${amtOn}"></div>
-           <input type="date" class="mf-duein"${dataN} value="${dueVal}" onchange="${dueOn}">
-           ${paidCell}${del}
+           <div class="mf-amtin"><span>$</span><input type="number" inputmode="decimal" step="0.01"${dataN} value="${amtVal}" placeholder="0" onchange="${amtOn}"></div>
+           ${statusCell(it,freq)}${del}
         </div>`; };
      const existing=items.filter(it=>it.frequency===cur);
      const used=new Set(); existing.forEach(it=>{ used.add((it.name||'').trim().toLowerCase()); if(it.preset)used.add(it.preset.trim().toLowerCase()); });
      const presets=((MF_PRESETS[book]||{})[cur]||[]).filter(nm=>!used.has(nm.toLowerCase()));
      let rowsHtml=existing.map(it=>rowFor(it,null,cur)).join('')+presets.map(nm=>rowFor(null,nm,cur)).join('');
-     if(!rowsHtml) rowsHtml=`<div class="sub" style="padding:6px 0">No ${mfFreqLabel(cur).toLowerCase()} expenses yet. Add one below.</div>`;
-     return `<div class="mf-sec" style="margin-top:18px"><span>Expenses</span><span class="amt">${money2(mfExpPeriodTotal(book,period))} / ${per}</span></div>
+     if(!rowsHtml) rowsHtml=`<div class="sub" style="padding:8px 2px">No ${mfFreqLabel(cur).toLowerCase()} expenses yet. Add one below.</div>`;
+     return `<div class="mf-sec"><span>Expenses</span><span class="amt">${money2(mfExpPeriodTotal(book,period))} / ${per}</span></div>
        <div class="mf-etabs">${tabBtns}</div>
-       <div class="mf-exphead"><span>Expense</span><span>Amount</span><span>Due date</span><span>Paid?</span><span></span></div>
+       <div class="mf-exphead"><span>Expense</span><span>Amount</span><span>Status</span><span></span></div>
        ${rowsHtml}
        <button class="mf-addbtn" onclick="mfExpAddInline('${book}','${cur}')">${mfIcon('plus',14,'#4f6ef7')} Add custom expense</button>`; };
   const bookCard=(book)=>{ const c=mfEstCompute(book,period); const isPhone=book==='phone';
-     return `<div class="card mf-book"><div class="bd" style="padding:0">
-       <div class="mf-bookhd"><span class="mf-bookicon ${book}">${mfIcon(isPhone?'phone':'store',18,isPhone?'#4f6ef7':'#2f9e6b')}</span><span class="mf-booktitle">${isPhone?'Phone Cash':'General Cash'}</span><span class="mf-booktag">${isPhone?'Phones & electronics':'Store'}</span></div>
+     return `<div class="mf-book">
+       <div class="mf-bookhd"><span class="mf-bookicon ${book}">${mfIcon(isPhone?'phone':'store',18,isPhone?'#4f6ef7':'#12855a')}</span><span class="mf-booktitle">${isPhone?'Phone Cash':'General Cash'}</span><span class="mf-booktag">${isPhone?'Phones & electronics':'Store'}</span></div>
        <div class="mf-stat">
-         <div class="mf-statrow"><div><div class="mf-statk">Sales</div><div class="mf-statv">${money2(c.sales)}</div></div><div><div class="mf-statk">Gross profit</div><div class="mf-statv" style="color:#8ef0b6">${money2(c.gp)}</div></div></div>
-         <div class="mf-statrow"><div><div class="mf-statk">Expenses</div><div class="mf-statv">${money2(c.exp)}</div></div><div><div class="mf-statk">Cost of goods</div><div class="mf-statv">${money2(c.cogs)}</div></div></div>
-         <div class="mf-statnet"><div><div class="mf-statk">Net profit / ${per}</div><div class="mf-statk" style="text-transform:none;margin-top:2px">Margin ${c.sales?c.margin.toFixed(1)+'%':'0%'}</div></div><div class="mf-netbig" style="color:${c.net>=0?'#8ef0b6':'#ffb3ad'}">${money2(c.net)}</div></div>
+         <div class="mf-statgrid">
+           <div><div class="mf-statk">Sales</div><div class="mf-statv">${money2(c.sales)}</div></div>
+           <div><div class="mf-statk">Gross profit</div><div class="mf-statv" style="color:#8ef0b6">${money2(c.gp)}</div></div>
+           <div><div class="mf-statk">Expenses</div><div class="mf-statv">${money2(c.exp)}</div></div>
+           <div><div class="mf-statk">Cost of goods</div><div class="mf-statv">${money2(c.cogs)}</div></div>
+         </div>
+         <div class="mf-statnet"><div><div class="mf-statk">Net profit / ${per}</div><div class="mf-statk" style="text-transform:none;margin-top:3px">Margin ${c.sales?c.margin.toFixed(1)+'%':'0%'}</div></div><div class="mf-netbig" style="color:${c.net>=0?'#8ef0b6':'#ffb3ad'}">${money2(c.net)}</div></div>
        </div>
-       <div class="mf-body">
-         <div class="mf-sec" style="margin-top:2px"><span>${isPhone?'Today’s sales':'Today’s sales'}</span></div>
-         ${isPhone?salesPhone:salesGeneral}
-         ${expBlock(book)}
+       <div class="mf-sec" style="margin-top:0"><span>Today's sales</span></div>
+       ${isPhone?salesPhone:salesGeneral}
+       ${expBlock(book)}
+     </div>`; };
+  const header=`<div class="mf-top">
+     <div><h1 class="mf-h1">Manual Finance Entry</h1><div class="mf-subt">Daily cash worksheet</div></div>
+     <div class="mf-topr">
+       <div class="mf-datenav">
+         <button class="mf-navb" onclick="mfShiftDate(-1)">${'‹'}</button>
+         <input type="date" class="mf-date" value="${mfDate}" onchange="mfNavDate(this.value)">
+         <button class="mf-navb" onclick="mfNavDate(new Date().toISOString().slice(0,10))">Today</button>
        </div>
-     </div></div>`; };
-  return `${mfCashCSS()}<div class="mf-wrap">
-   <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:8px">
-     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-       <div><h1 class="hello" style="margin:0">Manual Finance Entry</h1><div class="sub" style="font-size:12px">Daily cash worksheet</div></div>
-       <div style="display:flex;align-items:center;gap:8px">
-         <button class="btn sec sm" onclick="mfShiftDate(-1)">‹ Prev</button>
-         <input type="date" value="${mfDate}" onchange="mfNavDate(this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px">
-         <button class="btn sec sm" onclick="mfNavDate(new Date().toISOString().slice(0,10))">Today</button>
-       </div>
+       <div class="mf-savewrap"><span class="mf-savetxt${mfDirty?' dirty':''}">${mfSaveStatus()}</span><button class="mf-savebtn${mfDirty?' on':''}" onclick="mfSaveCash()">${mfDirty?'Save':'Saved'}</button></div>
      </div>
-   </div>
-   ${estWrap}
-   <div class="mf-books">${bookCard('general')}${bookCard('phone')}</div>
-   <div style="height:24px"></div>
    </div>`;
+  return `${mfCashCSS()}<div class="mf-wrap">${header}${kpis}<div class="mf-books">${bookCard('general')}${bookCard('phone')}</div><div style="height:24px"></div></div>`;
 }
 /* ============================================================
    Recurring Expenses - bill calendar + manager. Feeds Cash Entry + Finance.
