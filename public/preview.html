@@ -641,6 +641,16 @@ async function cloverRebuild(){if(!confirm('Rebuild 90 days of Clover revenue? T
 let salesPeriod=30, salesRange=30, overviewRange='today', aiOut='', aiTitle='', aiQ='', financeTab='overview', financeMode='auto', mfBook='general';
 const EXP_CATS=['Rent','Utilities','Payroll','Insurance','Software & POS','Marketing','Maintenance','Repairs','Supplies','Bank & card fees','Shipping','Taxes & licenses','Other'];
 function expensesForPeriod(days){if(typeof days==='string')days=presetDays(days);const cut=Date.now()-days*864e5;let total=0,fixed=0,variable=0;const byCat={};
+  // Primary source: the shared manual-finance recurring bills (Rent, Electric, Wi-Fi, Payroll…), amortized
+  // to the selected window. This is the single expense backbone that Cash Entry, Manual and Automated share.
+  const cyc=f=>f==='daily'?1:f==='weekly'?7:f==='biweekly'?14:f==='monthly'?30:f==='yearly'?365:0;
+  (((S.manualFinance||{}).recurring)||[]).forEach(it=>{ if(it.active===false||it.paused)return; const amt=Number(it.amount)||0; if(!amt)return;
+    let periodAmt=0;
+    if(it.frequency==='once'){ const t=it.startDate?new Date(it.startDate+'T12:00:00').getTime():0; if(t>=cut)periodAmt=amt; }
+    else { const cd=cyc(it.frequency); if(cd>0)periodAmt=(amt/cd)*days; }
+    if(!periodAmt)return; total+=periodAmt; if(it.amountType==='variable')variable+=periodAmt; else fixed+=periodAmt;
+    const c=it.category||'Other'; byCat[c]=(byCat[c]||0)+periodAmt; });
+  // Legacy ad-hoc expense store (kept so anything still writing to it is not lost).
   (S.expenses||[]).forEach(x=>{let amt=0;if(x.recurring)amt=(x.amount||0)*(days/30);else{const t=x.date?new Date(x.date).getTime():0;if(t>=cut)amt=(x.amount||0);}if(!amt)return;total+=amt;if(x.type==='fixed')fixed+=amt;else variable+=amt;byCat[x.category||'Other']=(byCat[x.category||'Other']||0)+amt;});
   return {total,fixed,variable,byCat};}
 const CH_COLOR={Clover:'#7cae90',NRS:'#7d93df',Website:'#d0a94e',Other:'#b6bcc6'};
@@ -1458,6 +1468,9 @@ function financeDetectedBills(){
   all.forEach(d=>{ const k=d.amount!=null ? (d.providerId+'|a'+Math.round(Number(d.amount))) : (d.providerId+'|m'+String(d.receivedAt||'').slice(0,7));
     if(!groups[k] || score(d)>score(groups[k]) || (score(d)===score(groups[k]) && String(d.receivedAt)>String(groups[k].receivedAt))) groups[k]=d; });
   let dets=Object.values(groups);
+  // Drop anything already confirmed for this provider+amount (so a confirmed bill never re-appears).
+  const confirmed=new Set(Object.values(S.billDetections||{}).filter(d=>d&&d.status==='confirmed'&&d.amount!=null).map(d=>d.providerId+'|a'+Math.round(Number(d.amount))));
+  dets=dets.filter(d=>d.amount==null || !confirmed.has(d.providerId+'|a'+Math.round(Number(d.amount))));
   const provHasAmount=new Set(dets.filter(d=>d.amount!=null).map(d=>d.providerId));
   dets=dets.filter(d=>d.amount!=null || !provHasAmount.has(d.providerId));
   dets.sort((a,b)=>String(b.dueDate||b.receivedAt||'').localeCompare(String(a.dueDate||a.receivedAt||'')));
