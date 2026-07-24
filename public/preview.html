@@ -313,6 +313,7 @@ function attnRow(color,title,subt,fn,cta){window._attn=window._attn||{};const id
   return `<div class="attn"><span class="d" style="background:${color}"></span><div class="tx">${esc(title)}<small>${esc(subt)}</small></div><a onclick="window._attn['${id}']()">${cta}</a></div>`}
 
 function openLive(mod){ window.location.href='/classic'; }
+function topSearch(q){ pSearch=(q||'').trim(); detailId=null; active='products'; render(); window.scrollTo(0,0); }
 
 function viewPlaceholder(k,name){
   const live=LIVE[k];
@@ -2434,7 +2435,7 @@ function render(){
    </aside>
    <div class="main">
      <div class="topbar">
-       <div class="search">${ic('search',17)}<input placeholder="Search product, barcode, SKU, brand, or shelf…" onkeydown="if(event.key==='Enter')openLive()"></div>
+       <div class="search">${ic('search',17)}<input placeholder="Search product, barcode, SKU, brand, or shelf…" value="${esc(pSearch)}" onkeydown="if(event.key==='Enter')topSearch(this.value)"></div>
        <div class="synced" id="syncwrap" onclick="manualSync()" title="Click to refresh now" style="cursor:pointer"><span class="dot"></span><span id="syncind">${syncText()}</span></div>
        ${role!=='employee'?mfBellHtml():''}
        ${ME&&ME.role==='owner'?`<div class="roleseg" title="Preview the layout each role sees. Your owner permissions are unchanged.">
