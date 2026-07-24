@@ -1534,35 +1534,40 @@ const BILL_TEMPLATES=[
   ['Google Workspace','payments-noreply@google.com, google.com','Software','fixed'],
   ['Adobe','adobe.com, mail.adobe.com','Software','fixed'],
   ['QuickBooks / Intuit','intuit.com, quickbooks.com','Software','fixed'] ];
+let billEditId=null;
+function billProviderEdit(id){ billEditId=id; billProvidersModal(); }
+function billProviderCancelEdit(){ billEditId=null; billProvidersModal(); }
 function billProvidersModal(){
   const provs=S.billProviders||[]; const cats=['Utilities','Software','Rent','Insurance','Payroll','Marketing','Loan/Debt','Tax','Other'];
-  const rows=provs.map(p=>`<div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
-     <div><b>${esc(p.name)}</b><div class="sub" style="font-size:11px">${esc((p.senders||[]).join(', '))} · ${esc(p.category||'')} · ${p.type==='fixed'?'Fixed':'Variable'} · ${p.book==='phone'?'Phone':'General'}</div></div>
+  const ed = billEditId ? provs.find(p=>p.id===billEditId) : null; const sel=(v,x)=>v===x?' selected':'';
+  const rows=provs.map(p=>`<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)${p.id===billEditId?';background:#f4f8ff':''}">
+     <div><b>${esc(p.name)}</b><div class="sub" style="font-size:11px">${esc((p.senders||[]).join(', '))} · ${esc(p.category||'')} · ${p.type==='fixed'?'Fixed':'Variable'} · ${p.book==='phone'?'Phone':'General'} · ${Number(p.serviceLagMonths)===0?'in advance':'last month'}</div></div>
      <label class="sub" style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap"><input type="checkbox" ${p.active!==false?'checked':''} onchange="billProviderToggle('${p.id}',this.checked)"> Active</label>
+     <button class="btn sec sm" onclick="billProviderEdit('${p.id}')">Edit</button>
      <button class="btn sec sm" onclick="billProviderDelete('${p.id}')">Remove</button></div>`).join('');
   const quick=BILL_TEMPLATES.map((t,i)=>`<button class="btn sec sm" onclick="billProviderQuickAdd(${i})">+ ${esc(t[0])}</button>`).join(' ');
-  document.getElementById('mdl').innerHTML=`<div class="mh"><b>Tracked email providers</b><button class="x" onclick="closeModal()">×</button></div>
+  document.getElementById('mdl').innerHTML=`<div class="mh"><b>Tracked email providers</b><button class="x" onclick="billEditId=null;closeModal()">×</button></div>
    <div class="mb" style="max-height:76vh;overflow:auto">
-     <div class="sub" style="margin-bottom:6px">ROS reads bills &amp; payments from these senders and lists them for you to confirm. Add a merchant and it is tracked automatically.</div>
+     <div class="sub" style="margin-bottom:6px">ROS reads bills &amp; payments from these senders and lists them for you to confirm.</div>
      ${provs.length?rows:'<div class="sub" style="padding:6px 0">No providers yet.</div>'}
-     <div style="font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#9aa1ad;margin:16px 0 8px">Add a merchant</div>
+     <div style="font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#9aa1ad;margin:16px 0 8px">${ed?'Edit '+esc(ed.name):'Add a merchant'}</div>
      <div class="fg">
-       <div class="fld"><label>Name</label><input id="bp_name" placeholder="National Grid, Adobe…"></div>
-       <div class="fld"><label>Sender email or domain</label><input id="bp_send" placeholder="billing@nationalgrid.com or nationalgrid.com"></div>
-       <div class="fld"><label>Category</label><select id="bp_cat">${cats.map(c=>`<option>${c}</option>`).join('')}</select></div>
-       <div class="fld"><label>Type</label><select id="bp_type"><option value="variable">Variable (amount changes)</option><option value="fixed">Fixed (same each time)</option></select></div>
-       <div class="fld"><label>Cash book</label><select id="bp_book"><option value="general">General Cash</option><option value="phone">Phone Cash</option></select></div>
-       <div class="fld"><label>Bill timing</label><select id="bp_lag"><option value="1">Bills for last month (utilities)</option><option value="0">Same month / in advance</option></select></div>
+       <div class="fld"><label>Name</label><input id="bp_name" value="${ed?esc(ed.name):''}" placeholder="National Grid, Adobe…"></div>
+       <div class="fld"><label>Sender email or domain</label><input id="bp_send" value="${ed?esc((ed.senders||[]).join(', ')):''}" placeholder="billing@nationalgrid.com or nationalgrid.com"></div>
+       <div class="fld"><label>Category</label><select id="bp_cat">${cats.map(c=>`<option${sel(c,ed&&ed.category)}>${c}</option>`).join('')}</select></div>
+       <div class="fld"><label>Type</label><select id="bp_type"><option value="variable"${sel('variable',ed&&ed.type)}>Variable (amount changes)</option><option value="fixed"${sel('fixed',ed&&ed.type)}>Fixed (same each time)</option></select></div>
+       <div class="fld"><label>Cash book</label><select id="bp_book"><option value="general"${sel('general',ed&&ed.book)}>General Cash</option><option value="phone"${sel('phone',ed&&ed.book)}>Phone Cash</option></select></div>
+       <div class="fld"><label>Bill timing</label><select id="bp_lag"><option value="1"${ed&&Number(ed.serviceLagMonths)===1?' selected':''}>Bills for last month (utilities)</option><option value="0"${ed&&Number(ed.serviceLagMonths)===0?' selected':''}>Same month / in advance</option></select></div>
      </div>
-     <button class="btn" style="margin-top:6px" onclick="billProviderSave()">Add provider</button>
-     <div style="font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#9aa1ad;margin:16px 0 8px">Quick add common vendors</div>
-     <div style="display:flex;flex-wrap:wrap;gap:6px">${quick}</div>
+     <div style="margin-top:8px;display:flex;gap:8px"><button class="btn" onclick="billProviderSave()">${ed?'Update provider':'Add provider'}</button>${ed?'<button class="btn sec" onclick="billProviderCancelEdit()">Cancel</button>':''}</div>
+     ${ed?'':`<div style="font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#9aa1ad;margin:16px 0 8px">Quick add common vendors</div><div style="display:flex;flex-wrap:wrap;gap:6px">${quick}</div>`}
      <div class="sub" style="font-size:11px;margin-top:10px">Keep supplier / stock-purchase senders out of here - those are inventory cost (COGS), tracked in Receiving.</div>
-   </div><div class="mf"><button class="btn sec" onclick="closeModal()">Close</button></div>`;
+   </div><div class="mf"><button class="btn sec" onclick="billEditId=null;closeModal()">Close</button></div>`;
   showModal();
 }
 async function billProviderSave(){ const name=val('bp_name'); const senders=val('bp_send'); if(!name||!senders){toast('Name and sender required');return;}
-  try{ const r=await fetch('/api/bills/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,senders,category:val('bp_cat'),type:val('bp_type'),book:val('bp_book'),serviceLagMonths:Number(val('bp_lag')||1)})}); const j=await r.json(); if(j.error){toast(j.error);return;} await load(); billProvidersModal(); toast('Added '+name); }catch(e){ toast('Failed'); } }
+  const body={name,senders,category:val('bp_cat'),type:val('bp_type'),book:val('bp_book'),serviceLagMonths:Number(val('bp_lag')||1)}; if(billEditId)body.id=billEditId;
+  try{ const r=await fetch('/api/bills/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json(); if(j.error){toast(j.error);return;} const wasEdit=!!billEditId; billEditId=null; await load(); billProvidersModal(); toast(wasEdit?('Updated '+name):('Added '+name)); }catch(e){ toast('Failed'); } }
 async function billProviderDelete(id){ if(!confirm('Remove this provider? Bills you already confirmed stay in Finance.'))return; try{ await fetch('/api/bills/provider/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}); await load(); billProvidersModal(); }catch(e){} }
 async function billProviderToggle(id,active){ const p=(S.billProviders||[]).find(x=>x.id===id); if(!p)return; try{ await fetch('/api/bills/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({},p,{active}))}); await load(); }catch(e){} }
 async function billProviderQuickAdd(i){ const t=BILL_TEMPLATES[i]; if(!t)return; try{ await fetch('/api/bills/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:t[0],senders:t[1],category:t[2],type:t[3],book:'general',serviceLagMonths:1})}); await load(); billProvidersModal(); toast('Added '+t[0]); }catch(e){} }
