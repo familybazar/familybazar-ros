@@ -189,10 +189,10 @@ function effPrice(p){return (p.salePrice!=null&&p.salePrice!=='')?p.salePrice:p.
 function stockState(p){if((p.qty||0)<=0)return'out';if((p.qty||0)<=(p.reorderThreshold||0))return'low';return'in'}
 
 const NAV=[
- ['overview','Overview','overview'],['products','Products','products'],['catalog','Catalog Health','health'],['inventory','Inventory','inventory'],
- ['receiving','Receiving','receiving'],['fulfillment','Fulfillment','fulfillment'],
- ['sales','Sales','sales'],['finance','Finance','finance'],['cashentry','Cash Entry','cash'],['customers','Customers','customers'],
- ['operations','Operations','operations'],['channels','Channels','channels'],['marketing','Marketing','megaphone'],['integrations','Integrations','integrations'],
+ ['overview','Home','overview'],['products','Products','products'],['catalog','Product info','health'],['inventory','Stock','inventory'],
+ ['receiving','Receive stock','receiving'],['fulfillment','Orders & pickups','fulfillment'],
+ ['sales','Sales','sales'],['finance','Finance','finance'],['cashentry','Daily cash','cash'],['customers','Customers','customers'],
+ ['operations','Requests','operations'],['channels','Sell online','channels'],['marketing','Marketing','megaphone'],['integrations','Settings','integrations'],
  ['ai','AI Assistant','ai'],['reports','Reports','reports']
 ];
 /* which nav items map to a working screen in the current live app */
@@ -875,10 +875,10 @@ function viewFinance(){
    <div class="seg" style="margin:14px 0 6px">${modes.map(m=>`<button class="${financeMode===m[0]?'on':''}" onclick="financeMode='${m[0]}';render()">${m[1]}</button>`).join('')}</div>`;
   if(financeMode==='manual') return head+viewManualFinance();
   if(financeMode==='compare') return head+viewFinanceCompare();
-  const tabs=[['overview','Overview'],['revenue','Revenue'],['expenses','Expenses'],['cashflow','Cash flow'],['payables','Payables'],['tax','Sales tax'],['reports','Reports']];
+  const tabs=[['overview','Overview'],['revenue','Revenue'],['expenses','Expenses'],['cashflow','Cash flow'],['payables','Bills to pay'],['tax','Sales tax'],['reports','Reports']];
   const sub=`<div class="seg" style="margin:6px 0 8px;flex-wrap:wrap">${tabs.map(t=>`<button class="${financeTab===t[0]?'on':''}" onclick="financeTab='${t[0]}';render()">${t[1]}</button>`).join('')}</div>`;
   const map={overview:financeOverview,revenue:financeRevenue,expenses:financeExpenses,cashflow:financeCashflow,payables:financePayables,tax:financeTax,reports:financeReports};
-  return head+`<div class="sub" style="margin:2px 0 6px">Auto-generated from Clover + NRS + integrations. Becomes the single source of truth as automation (incl. product costs) completes.</div>`+sub+(map[financeTab]||financeOverview)();
+  return head+`<div class="sub" style="margin:2px 0 6px">Your sales and bills, added up automatically.</div>`+sub+(map[financeTab]||financeOverview)();
 }
 
 /* ============================================================
@@ -1301,7 +1301,7 @@ function viewCashEntry(){
        ${mfExpenseTable(book,period)}
      </div>`; };
   const header=`<div class="mf-top">
-     <div><h1 class="mf-h1">Manual Finance Entry</h1><div class="mf-subt">Daily cash worksheet</div></div>
+     <div><h1 class="mf-h1">Daily Cash</h1><div class="mf-subt">Enter today's sales, mark bills paid</div></div>
      <div class="mf-topr">
        <div class="mf-datenav">
          <button class="mf-navb" onclick="mfShiftDate(-1)">${'‹'}</button>
@@ -2407,8 +2407,7 @@ function render(){
      <nav class="nav">
        ${nav.map(([k,name,i])=>`<a class="${active===k?'active':''}" onclick="go('${k}')">${ic(i)}<span>${name}</span>${k==='operations'&&S.requests&&S.requests.filter(r=>r.status==='Open').length?`<span class="badge">${S.requests.filter(r=>r.status==='Open').length}</span>`:''}</a>`).join('')}
        <div class="lbl">OTHER SCREENS</div>
-       <a onclick="go('integrations')">${ic('settings')}<span>Settings &amp; keys</span></a>
-       <a onclick="window.location.href='/classic'">${ic('mobile')}<span>Classic UI →</span></a>
+       <a onclick="window.location.href='/classic'">${ic('mobile')}<span>Old layout →</span></a>
      </nav>
      <div class="userbox">
        <div class="av">${(ME&&ME.name?ME.name:'?').slice(0,2).toUpperCase()}</div>
