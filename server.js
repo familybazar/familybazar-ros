@@ -1798,7 +1798,9 @@ function billUpsertOccurrence(it, amount, monthDateStr, opts){ opts=opts||{};
   const amtR=Math.round(Number(amount)); let key=null;
   for(const k in mf.payments){ if(k.indexOf(it.id+'|')!==0)continue; const p=mf.payments[k];
     if(p&&p.amount!=null&&Math.round(Number(p.amount))===amtR){ key=k; if(!(p.status==='paid'&&!opts.paid))break; } }
-  if(!key) key=it.id+'|'+billCanonicalDue(it, monthDateStr);
+  if(!key){ const canon=it.id+'|'+billCanonicalDue(it, monthDateStr); const ex=mf.payments[canon];
+    // don't clobber a different bill that already sits on the canonical date - use the exact date instead
+    key=(ex && ex.amount!=null && Math.round(Number(ex.amount))!==amtR) ? (it.id+'|'+monthDateStr) : canon; }
   const prev=mf.payments[key]||{};
   const rec=Object.assign({},prev,{ amount:Number(amount), expected:(prev.expected!=null?prev.expected:Number(amount)),
     dueDate:prev.dueDate||billCanonicalDue(it,monthDateStr), source:opts.source||prev.source||'email' });
@@ -1880,9 +1882,10 @@ function billGmailRun(opts){
             data.billDetections[key]={ key, kind:'bill', provider:prov.name, providerId:prov.id, book:prov.book||'general',
               category:prov.category||'Utilities', matchName:prov.matchName||prov.name, messageId, subject,
               receivedAt:new Date(receivedMs).toISOString(), amount:hasAmt?ext.amount:null,
-              // If the email prints no due date (Con Ed "bill ready"), anchor to the email date so the bill
-              // still lands in the right month for date-wise accounting; flag it as an estimate.
-              dueDate:(ext&&ext.dueDate)||(hasAmt?recvDay:null), dueEstimated:!(ext&&ext.dueDate)&&hasAmt,
+              // If the email prints no due date (Con Ed "bill ready"), estimate it ~21 days out (typical
+              // utility terms) so this month's bill lands in the month it's actually due/paid, not the same
+              // month as a prior bill; flag it as an estimate.
+              dueDate:(ext&&ext.dueDate)||(hasAmt?new Date(receivedMs+21*86400000).toISOString().slice(0,10):null), dueEstimated:!(ext&&ext.dueDate)&&hasAmt,
               invoiceNo:(ext&&ext.invoiceNo)||null, accountNo:(ext&&ext.accountNo)||null,
               amountFound:!!(ext&&ext.amountFound), status:'new', error:(ext&&ext.error)||null, detectedAt:now() };
             if(ext&&ext.amount!=null) log.detected++; else log.noAmount++;
